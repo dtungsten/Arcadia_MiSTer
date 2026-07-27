@@ -90,6 +90,9 @@ ENTITY sgs2637 IS
     vid_ce   : OUT std_logic;
     vrst     : OUT std_logic;
 
+    clearing : OUT std_logic;
+    poke3d   : IN std_logic;
+
     sound    : OUT uv8;
 
     pot1     : IN uv8;
@@ -179,6 +182,11 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL ram : arr_uv8(0 TO 1023);
   ATTRIBUTE ramstyle : string;
   ATTRIBUTE ramstyle OF ram : SIGNAL IS "no_rw_check";
+
+  SIGNAL clr_run    : std_logic := '0';
+  SIGNAL clr_run_d  : std_logic := '0';
+  SIGNAL clr_addr   : unsigned(9 DOWNTO 0) := (OTHERS => '0');
+  SIGNAL poke_apply : std_logic;
 
   SIGNAL adi : uv12;
   SIGNAL ram_ad,xxx_ad : uv10;
@@ -322,6 +330,26 @@ BEGIN
   adi <="0" & ad(10 DOWNTO 0);
 
   dr<=dr_reg WHEN drreg_sel='1' ELSE dr_mem;
+
+  clearing <= clr_run;
+  poke_apply <= clr_run_d AND NOT clr_run;
+
+  RamClear: PROCESS(clk) IS
+  BEGIN
+    IF rising_edge(clk) THEN
+      clr_run_d <= clr_run;
+      IF poke3d='1' THEN
+        clr_run  <= '1';
+        clr_addr <= (OTHERS => '0');
+      ELSIF clr_run='1' THEN
+        IF clr_addr = 1023 THEN
+          clr_run <= '0';
+        ELSE
+          clr_addr <= clr_addr + 1;
+        END IF;
+      END IF;
+    END IF;
+  END PROCESS RamClear;
   
   Regs:PROCESS(clk,reset_na) IS
   BEGIN
@@ -334,7 +362,11 @@ BEGIN
       -- RAM
       dr_mem<=ram(to_integer(adi(9 DOWNTO 0)));
 
-      IF wreq='1' THEN
+      IF clr_run='1' THEN
+        ram(to_integer(clr_addr)) <= x"00";
+      ELSIF poke_apply='1' THEN
+        ram(218) <= x"64";                      -- 3D Attack boot poke (0x18DA)
+      ELSIF wreq='1' THEN
         ram(to_integer(adi(9 DOWNTO 0)))<=dw;
       END IF;
       

@@ -113,6 +113,11 @@ ARCHITECTURE struct OF arcadia_core IS
   ATTRIBUTE ramstyle OF cart : VARIABLE IS "no_rw_check";
   
   SIGNAL wcart : std_logic;
+
+  SIGNAL is_3dattack   : std_logic;
+  SIGNAL is_3dattack_d : std_logic;
+  SIGNAL poke3d        : std_logic;
+  SIGNAL sgs_clearing  : std_logic;
   
   SIGNAL vga_argb : unsigned(3 DOWNTO 0);
   SIGNAL vga_dei  : std_logic;
@@ -176,6 +181,8 @@ BEGIN
       vid_vsyn  => vga_vsyn,
       vid_ce    => vga_ce,
       vrst      => vrst,
+      clearing  => sgs_clearing,
+      poke3d    => poke3d,
       sound     => sound1,
       pot1      => potr_v,
       pot2      => potl_v,
@@ -306,6 +313,23 @@ BEGIN
       END IF;
     END IF;
   END PROCESS ComputeCRC32;
+
+  -- 3D Attack detection latch (CRC 0xEF110A16)
+  Detect3DAttack:PROCESS(clk) IS
+  BEGIN
+    IF rising_edge(clk) THEN
+      IF dl_start = '1' THEN
+        is_3dattack <= '0';
+      ELSIF dl_done = '1' THEN
+        IF (crc32_reg XOR x"FFFFFFFF") = x"EF110A16" THEN
+          is_3dattack <= '1';
+        END IF;
+      END IF;
+      is_3dattack_d <= is_3dattack;
+    END IF;
+  END PROCESS Detect3DAttack;
+
+  poke3d <= is_3dattack AND NOT is_3dattack_d;  -- one-cycle pulse on detection
 
   -- Games requiring XY swap on genuine Arcadia hardware (games.h: swapped=TRUE).
   -- MPT-03 clone releases never appear here — every MPT-03 title is swapped=FALSE.
