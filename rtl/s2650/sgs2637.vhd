@@ -250,12 +250,13 @@ ARCHITECTURE rtl OF sgs2637 IS
     vc   : uv8; -- Vertical   coordinate object
     size : std_logic; -- Object size
     no   : uint2) RETURN unsigned IS
-    VARIABLE ivc : natural := to_integer(vc);
+    VARIABLE vpos_adj : integer := integer(vpos) - to_integer(vc);
   BEGIN
+    IF vpos_adj < 0 THEN vpos_adj := 0; END IF;
     IF size='0' THEN -- 16 lines
-      RETURN to_unsigned(384 + no*8 + (((vpos-ivc)/2) MOD 8), 10);
+      RETURN to_unsigned(384 + no*8 + ((vpos_adj/2) MOD 8), 10);
     ELSE -- 8 lines
-      RETURN to_unsigned(384 + no*8 + (((vpos-ivc) ) MOD 8), 10);
+      RETURN to_unsigned(384 + no*8 + (vpos_adj MOD 8), 10);
     END IF;
   END FUNCTION objadrs;
 
@@ -319,7 +320,7 @@ BEGIN
   ack<='1';
 
   wreq<=wr AND req AND tick;
-  adi <="0" & ad(10 DOWNTO 0);
+  adi <= ad(11 DOWNTO 0) - (ad(11) & "00000000000");
 
   dr<=dr_reg WHEN drreg_sel='1' ELSE dr_mem;
   
@@ -335,6 +336,10 @@ BEGIN
       dr_mem<=ram(to_integer(adi(9 DOWNTO 0)));
 
       IF wreq='1' THEN
+        IF adi(9 DOWNTO 4)=x"0F" OR adi(9 DOWNTO 4)=x"1F" THEN
+          REPORT "2637 reg write " & integer'image(to_integer(adi(9 DOWNTO 0))) &
+                 " = " & integer'image(to_integer(dw)) SEVERITY NOTE;
+        END IF;
         ram(to_integer(adi(9 DOWNTO 0)))<=dw;
       END IF;
       
@@ -417,51 +422,47 @@ BEGIN
   MadMux:PROCESS(ram_dr,vpos,voffset,hpos,hshift,r_csize,
                  o1_size,o2_size,o3_size,o4_size,
                  o1_vc,o2_vc,o3_vc,o4_vc,cyc) IS
+    VARIABLE hpos_adj : integer;
+    VARIABLE vpos_adj : integer;
   BEGIN
+    hpos_adj := integer(hpos) - HOFFSET - to_integer(hshift);
+    IF hpos_adj < 0 THEN hpos_adj := 0; END IF;
+    vpos_adj := integer(vpos) - to_integer(voffset);
+    IF vpos_adj < 0 THEN vpos_adj := 0; END IF;
     
     -- Character ROM
     IF r_csize='1' THEN
-      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + ((vpos - voffset) MOD 8);
+      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + (vpos_adj MOD 8);
     ELSE
-      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + ((vpos - voffset)/2 MOD 8);
+      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + ((vpos_adj/2) MOD 8);
     END IF;
     
-    IF (vpos) < 13*8  + to_integer(voffset) THEN
-      xxx_ad <=to_unsigned(
-        (hpos - HOFFSET - to_integer(hshift)) / 8
-        + ((vpos - to_integer(voffset)) / 8) * 16,10);
+    IF vpos_adj < 13*8 THEN
+      xxx_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 8) * 16,10);
     ELSE
-      xxx_ad <=to_unsigned(512 +
-         (hpos - HOFFSET - to_integer(hshift)) / 8
-         + ((vpos - to_integer(voffset)) / 8 - 13) * 16,10);
+      xxx_ad <=to_unsigned(512 + hpos_adj / 8 + (vpos_adj / 8 - 13) * 16,10);
     END IF;
     
     CASE cyc IS
       WHEN 1 | 7 | 0 => -- Read text image
         IF r_csize='1' THEN -- Small chars
-          IF vpos < 13*8 + to_integer(voffset) THEN
-            ram_ad <=to_unsigned(
-              (hpos - HOFFSET - to_integer(hshift)) / 8
-              + ((vpos - to_integer(voffset)) / 8) * 16,10);
+          IF vpos_adj < 13*8 THEN
+            ram_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 8) * 16,10);
           ELSE
-            ram_ad <=to_unsigned(512 +
-              (hpos - HOFFSET - to_integer(hshift)) / 8
-              + ((vpos - to_integer(voffset)) / 8 - 13) * 16,10);
+            ram_ad <=to_unsigned(512 + hpos_adj / 8 + (vpos_adj / 8 - 13) * 16,10);
           END IF;
           
         ELSE -- High chars
-          ram_ad <=to_unsigned(
-            (hpos - HOFFSET - to_integer(hshift)) / 8
-            + ((vpos - to_integer(voffset)) / 16) * 16,10);
+          ram_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 16) * 16,10);
         END IF;
         
       WHEN 2 => -- Read user character shape
         IF r_csize='1' THEN
           ram_ad <= to_unsigned(384 + to_integer(ram_dr(2 DOWNTO 0)) * 8 +
-                                ((vpos - to_integer(voffset)) MOD 8),10);
+                                (vpos_adj MOD 8),10);
         ELSE
          ram_ad <= to_unsigned(384 + to_integer(ram_dr(2 DOWNTO 0)) * 8 +
-                                ((vpos - to_integer(voffset))/2 MOD 8),10);
+                                ((vpos_adj)/2 MOD 8),10);
         END IF;
         
       WHEN 3 => -- Read object 1 shape
@@ -521,15 +522,15 @@ BEGIN
       END IF;
 
 
-      hlen <=227;
-      hsync<=200;
-      hdisp<=184;
+      -- hlen <=227;
+      -- hsync<=200;
+      -- hdisp<=184;
       
-      vlen <=312;
-      vsync<=269;
-      vdisp<=268;
+      -- vlen <=312;
+      -- vsync<=269;
+      -- vdisp<=268;
 
-      vsync<=270;
+      -- vsync<=270;
       
       --------------------------------------------
       -- Collisions pulses
@@ -674,10 +675,10 @@ BEGIN
             
           ELSIF r_csize='1' THEN -- 16x13 mode
             h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift)) MOD 8,
-                   ((vpos-to_integer(voffset))/8) MOD 2,dm_v,ch);
+                   ((vpos-to_integer(voffset))/4) MOD 2,dm_v,ch);
           ELSE -- 16x26 mode
             h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift)) MOD 8,
-                   ((vpos-to_integer(voffset))/4) MOD 2,dm_v,ch);
+                   ((vpos-to_integer(voffset))/8) MOD 2,dm_v,ch);
           END IF;
           
           bg_hit<=to_std_logic(h AND m);
