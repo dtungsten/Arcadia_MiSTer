@@ -378,8 +378,8 @@ BEGIN
                     
                   WHEN ZBRR => -- Zero Branch, Relative, unconditional
                     state_c<=sWAIT;
-                    ad_c <="00" & sext(dr(6 DOWNTO 0),13);
-                    iar_c<="00" & sext(dr(6 DOWNTO 0),13);
+                    ad_c <="00000000" & dr(6 DOWNTO 0);
+                    iar_c<="00000000" & dr(6 DOWNTO 0);
                     IF dr(7)='1' THEN -- INDIRECT
                       ph_c<=phINDIRECT;
                       state_c<=sINDIRECT;
@@ -410,8 +410,8 @@ BEGIN
                     
                   WHEN ZBSR => -- Zero Branch to Sub, Relative, unconditional
                     pushsub_c<='1';
-                    ad_c <="00" & sext(dr(6 DOWNTO 0),13);
-                    iar_c<="00" & sext(dr(6 DOWNTO 0),13);
+                    ad_c <="00000000" & dr(6 DOWNTO 0);
+                    iar_c<="00000000" & dr(6 DOWNTO 0);
                     IF dr(7)='1' THEN -- INDIRECT
                       ph_c<=phINDIRECT;
                       state_c<=sINDIRECT;
@@ -816,6 +816,7 @@ BEGIN
       iar<="000000000000000";
       psu_sp<="000";
       psu_ii<='0';
+      psl<=x"00";
 
 --pragma synthesis_off
       r0<=x"00";
@@ -892,6 +893,7 @@ BEGIN
         iar<=(OTHERS =>'0');
         psu_ii<='0';
         psu_sp<="000";
+        psl<=x"00";
         psl_rs<='0';
         psu(4 DOWNTO 3)<="00"; -- User Flags
         state<=sOPCODE;

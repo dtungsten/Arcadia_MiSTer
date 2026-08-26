@@ -119,6 +119,7 @@ ARCHITECTURE struct OF arcadia_core IS
   SIGNAL wcart : std_logic;
   
   SIGNAL vga_argb : unsigned(3 DOWNTO 0);
+  SIGNAL vga_argb_reg : unsigned(3 DOWNTO 0);
   SIGNAL vga_dei  : std_logic;
   SIGNAL vga_hsyn : std_logic;
   SIGNAL vga_vsyn : std_logic;
@@ -209,9 +210,9 @@ BEGIN
   keypad2_2<="0000" & (p2_joy(11) OR p2_joy(19) OR p2_joy(20)) & p2_joy(14) & p2_joy(17) & p2_joy(9) ; -- 1905 : 2 5 8 0 (fire buttons parallel "2" per PCB schematic)
   keypad2_3<="0000" & p2_joy(12) & p2_joy(15) & p2_joy(18) & p2_joy(7) ; -- 1906 : 3 6 9 ENTER
   
-  keypanel <="00000" & (p1_joy(6) & p1_joy(5) & p1_joy(4)) OR
-                       (p2_joy(6) & p2_joy(5) & p2_joy(4)); -- 1908 : Option Select Start (Emerson console labeling; A/B are legacy MPT-03 names)
-  
+  keypanel <= "00000" & ((p1_joy(6) & p1_joy(5) & p1_joy(4)) OR
+                         (p2_joy(6) & p2_joy(5) & p2_joy(4))); -- 1908 : Option Select Start (Emerson console labeling; A/B are legacy MPT-03 names)
+
   dr_key<=keypad1_1 WHEN ad_delay(3 DOWNTO 0)=x"0" ELSE -- 1900
           keypad1_2 WHEN ad_delay(3 DOWNTO 0)=x"1" ELSE -- 1901
           keypad1_3 WHEN ad_delay(3 DOWNTO 0)=x"2" ELSE -- 1902
@@ -467,10 +468,10 @@ BEGIN
   vga_hs<=vga_hsyn WHEN rising_edge(clk);
   vga_vs<=vga_vsyn WHEN rising_edge(clk);
   
-  vga_argb<=vga_argb  WHEN rising_edge(clk);
-  vga_r_i<=(7=>vga_argb(2) AND vga_argb(3),OTHERS => vga_argb(2));
-  vga_g_i<=(7=>vga_argb(1) AND vga_argb(3),OTHERS => vga_argb(1));
-  vga_b_i<=(7=>vga_argb(0) AND vga_argb(3),OTHERS => vga_argb(0));
+  vga_argb_reg<=vga_argb  WHEN rising_edge(clk);
+  vga_r_i<=(7=>vga_argb_reg(2) AND vga_argb_reg(3),OTHERS => vga_argb_reg(2));
+  vga_g_i<=(7=>vga_argb_reg(1) AND vga_argb_reg(3),OTHERS => vga_argb_reg(1));
+  vga_b_i<=(7=>vga_argb_reg(0) AND vga_argb_reg(3),OTHERS => vga_argb_reg(0));
   vga_r<=std_logic_vector(vga_r_i);
   vga_g<=std_logic_vector(vga_g_i);
   vga_b<=std_logic_vector(vga_b_i);

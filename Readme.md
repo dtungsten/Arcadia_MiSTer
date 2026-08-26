@@ -163,9 +163,9 @@ Leave Off when adjusting video settings that need a live picture.
 - **Basketball:** This game just controls very weird, not a glitch.
 - **Black Jack & Poker:** doesn't boot properly
 - **Circus:** requires analog stick input or D-pad emulation
-- **Crazy Climber:** Missing audio. Graphical issues.
-- **Doraemon:** appears to lock up at the playfield load
-- **Dr. Slump:** graphics corruption, locks up
+- **Crazy Climber:** Graphical issues.
+- **Doraemon:** locks up at the playfield load
+- **Dr. Slump:** locks up
 - **Escape:** doesn't play right
 - **Frogger:** graphics corruption - a known ROM issue
 - **Funky Fish:** locks up
@@ -180,9 +180,12 @@ Leave Off when adjusting video settings that need a live picture.
 - **Route 16:** game doesn't start
 - **Star Chess:** graphics corruption
 - **Super Dimension Fortress Macross:** doesn't boot properly.
-- **Turtles:** Missing energy bar which indicates bomb availability.
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
+
+## Changelog 20260817
+
+- Fixed some graphical glitches affecting Turtles, Doraemon, and Dr. slump
 
 ## Changelog 20260816
 

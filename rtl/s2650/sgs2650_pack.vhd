@@ -485,12 +485,12 @@ PACKAGE BODY sgs2650_pack IS
           pslo_cc:="00";
         ELSIF psli_com='1' AND -- Unsigned <
           ((vi1(7)='0' AND vi2(7)='1') OR
-             (vt(7)='1' AND NOT (vi1(7)='1' AND vi2(7)='0'))) THEN
+            (vt(7)='1' AND NOT (vi1(7)='1' AND vi2(7)='0'))) THEN
           pslo_cc:="10";
         ELSIF psli_com='0' AND -- Signed <
-           ((vi1(7)='1' AND vi2(7)='0') OR
+          ((vi1(7)='1' AND vi2(7)='0') OR
             (vi1(7)='0' AND vi2(7)='0' AND vt(7)='1') OR
-            (vi1(7)='1' AND vi2(7)='1' AND vt(7)='0')) THEN -- Signed <
+            (vi1(7)='1' AND vi2(7)='1' AND vt(7)='1')) THEN -- Signed <
           pslo_cc:="10";
         ELSE -- >
           pslo_cc:="01";
