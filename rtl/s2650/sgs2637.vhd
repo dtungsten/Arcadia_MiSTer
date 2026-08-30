@@ -101,12 +101,15 @@ ENTITY sgs2637 IS
     
     reset    : IN std_logic;
     clk      : IN std_logic; -- 8x Pixel clock
-    reset_na : IN std_logic
+    reset_na : IN std_logic;
+    clear_ram : IN std_logic  -- clears video RAM when high (currently unused, logic disabled)
     );
 END ENTITY sgs2637;
 
 ARCHITECTURE rtl OF sgs2637 IS
   SUBTYPE uint9 IS natural RANGE 0 TO 511;
+  -- uint10: wider horizontal position for object rendering with HOFFSET/hshift adjustment
+  SUBTYPE uint10 IS natural RANGE 0 TO 1023;
   
   -- 64 chars * 8 lines  = 512
   CONSTANT CHARS : arr_uv8(0 TO 511) := (
@@ -177,11 +180,14 @@ ARCHITECTURE rtl OF sgs2637 IS
   
   SIGNAL wreq : std_logic;
   SIGNAL ram : arr_uv8(0 TO 1023);
+  -- RAM clear logic disabled: caused severe routing congestion
+  -- SIGNAL ram_clear_idx : unsigned(10 DOWNTO 0) := to_unsigned(1024, 11);
+  -- SIGNAL clear_ram_d : std_logic := '0';
   ATTRIBUTE ramstyle : string;
   ATTRIBUTE ramstyle OF ram : SIGNAL IS "no_rw_check";
 
   SIGNAL adi : uv12;
-  SIGNAL ram_ad,xxx_ad : uv10;
+  SIGNAL ram_ad : uv10;  -- xxx_ad removed: unused, see commented block below
   SIGNAL ram_dr,rom_dr,ch : uv8;
   SIGNAL dr_reg,dr_mem : uv8;
   SIGNAL drreg_sel : std_logic;
@@ -229,12 +235,16 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL o1c_coll,o2c_coll,o3c_coll,o4c_coll : std_logic;
 
   SIGNAL col_grb : uv3;
-  CONSTANT HOFFSET : natural := 32+11; -- ???
+  -- Horizontal offset for text/object positioning (tuned for PAL/NTSC framing)
+  CONSTANT HOFFSET : natural := 16;
 
   SIGNAL cyc : uint3;
   SIGNAL vrle,vrle_pre,hrle,hrle_pre,hpulse : std_logic;
   SIGNAL hpos,hlen,hsync,hdisp : uint9;
   SIGNAL vpos,vlen,vsync,vdisp : uint9;
+  SIGNAL vpos_eff : uint9;
+  -- NTSC vertical offset adjustment (0 = no adjustment, tune to match WinArcadia framing)
+  CONSTANT NTSC_VOFFSET_ADJ : integer := 0;
 
   SIGNAL gmode : std_logic;
   
@@ -262,18 +272,21 @@ ARCHITECTURE rtl OF sgs2637 IS
 
   ------------------------------------------------
   FUNCTION objbit(
-    hpos : uint9; -- Spot horizontal position
+    hpos : uint10; -- Spot horizontal position
     hc   : uv8 ) RETURN natural IS -- Horizontal coordinate object
     VARIABLE a : uint3;
     VARIABLE ihc : uint8 := to_integer(hc);
   BEGIN
-    a:=(hpos-ihc) MOD 8;
+    -- +256 ensures non-negative value for MOD 8 (VHDL negative MOD gives negative result)
+    a:=(hpos + 256 - ihc) MOD 8;
     RETURN 7-a;
   END FUNCTION;
   
   ------------------------------------------------
+  -- hpos is uint10 (not uint9) to handle adjusted values up to 552
+  -- (hpos + 2*(HOFFSET+hshift) - 5 with hpos=511, hshift=7)
   FUNCTION objhit(
-    hpos : uint9; -- Spot horizontal position
+    hpos : uint10; -- Spot horizontal position
     vpos : uint9; -- Spot vertical   position
     hc   : uv8; -- Horizontal coordinate object
     vc   : uv8; -- Vertical   coordinate object
@@ -289,6 +302,38 @@ ARCHITECTURE rtl OF sgs2637 IS
     ELSE -- High
       RETURN vpos>=ivc AND (vpos-ivc)<16 AND hpos>=ihc AND (hpos-ihc)<8;
     END IF;
+  END FUNCTION;
+
+  ------------------------------------------------
+  -- objhpos: adjusted horizontal position for object hit detection.
+  -- Computes hpos + 2*(HOFFSET+hshift) - 5 in 10-bit unsigned arithmetic
+  -- (avoids 32-bit integer arithmetic for routing efficiency).
+  FUNCTION objhpos(
+    hpos : uint9;
+    hshift : uv3) RETURN uint10 IS
+    VARIABLE result : unsigned(9 DOWNTO 0);
+  BEGIN
+    result := resize(to_unsigned(hpos, 10), 10) +
+              to_unsigned(2*HOFFSET - 5, 10) +
+              resize(hshift & '0', 10);
+    RETURN to_integer(result);
+  END FUNCTION;
+
+  ------------------------------------------------
+  -- objpix: object pixel index (0-7) for sprite rendering.
+  -- Computes (hpos + 512 + 2*(HOFFSET+hshift) - 5 - hc) MOD 8 in 11-bit unsigned arithmetic.
+  -- +512 ensures non-negative value for MOD 8 (VHDL negative MOD gives negative result).
+  FUNCTION objpix(
+    hpos : uint9;
+    hshift : uv3;
+    hc   : uv8) RETURN natural IS
+    VARIABLE result : unsigned(10 DOWNTO 0);
+  BEGIN
+    result := resize(to_unsigned(hpos, 11), 11) +
+              to_unsigned(512 + 2*HOFFSET - 5, 11) +
+              resize(hshift & '0', 11) -
+              resize(hc, 11);
+    RETURN to_integer(result(2 DOWNTO 0));
   END FUNCTION;
 
   ------------------------------------------------
@@ -329,13 +374,28 @@ BEGIN
     IF reset_na='0' THEN
       ocoll_pre<='0';
       ccoll_pre<='0';
+      -- ram_clear_idx <= to_unsigned(1024, 11);
+      -- clear_ram_d <= '0';
       
     ELSIF rising_edge(clk) THEN
+      --------------------------------------------
+      -- RAM clear on cart load (rising edge of clear_ram)
+      -- DISABLED: caused severe routing congestion
+      -- clear_ram_d <= clear_ram;
+      -- IF clear_ram = '1' AND clear_ram_d = '0' AND ram_clear_idx >= 1024 THEN
+      --   ram_clear_idx <= to_unsigned(0, 11);
+      -- END IF;
+      -- IF ram_clear_idx < 1024 THEN
+      --   ram(to_integer(ram_clear_idx)) <= x"00";
+      --   ram_clear_idx <= ram_clear_idx + 1;
+      -- END IF;
+      
       --------------------------------------------
       -- RAM
       dr_mem<=ram(to_integer(adi(9 DOWNTO 0)));
 
       IF wreq='1' THEN
+        -- DEBUG: log 2637 register writes (F0-FF, 1F8-1FB) for debugging
         IF adi(9 DOWNTO 4)=x"0F" OR adi(9 DOWNTO 4)=x"1F" THEN
           REPORT "2637 reg write " & integer'image(to_integer(adi(9 DOWNTO 0))) &
                  " = " & integer'image(to_integer(dw)) SEVERITY NOTE;
@@ -419,66 +479,75 @@ BEGIN
 
   ------------------------------------------------------------------------------
   -- Memory address mux
-  MadMux:PROCESS(ram_dr,vpos,voffset,hpos,hshift,r_csize,
+  -- NTSC vertical offset to match WinArcadia framing
+  vpos_eff <= vpos - NTSC_VOFFSET_ADJ WHEN np='0' AND vpos >= NTSC_VOFFSET_ADJ ELSE
+              0 WHEN np='0' ELSE
+              vpos;
+
+MadMux:PROCESS(ram_dr,vpos_eff,voffset,hpos,hshift,r_csize,
                  o1_size,o2_size,o3_size,o4_size,
                  o1_vc,o2_vc,o3_vc,o4_vc,cyc) IS
-    VARIABLE hpos_adj : integer;
-    VARIABLE vpos_adj : integer;
   BEGIN
-    hpos_adj := integer(hpos) - HOFFSET - to_integer(hshift);
-    IF hpos_adj < 0 THEN hpos_adj := 0; END IF;
-    vpos_adj := integer(vpos) - to_integer(voffset);
-    IF vpos_adj < 0 THEN vpos_adj := 0; END IF;
-    
     -- Character ROM
     IF r_csize='1' THEN
-      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + (vpos_adj MOD 8);
+      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + ((vpos_eff + 256 - to_integer(voffset)) MOD 8);
     ELSE
-      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + ((vpos_adj/2) MOD 8);
+      rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + (((vpos_eff + 256 - to_integer(voffset)) / 2) MOD 8);
     END IF;
     
-    IF vpos_adj < 13*8 THEN
-      xxx_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 8) * 16,10);
-    ELSE
-      xxx_ad <=to_unsigned(512 + hpos_adj / 8 + (vpos_adj / 8 - 13) * 16,10);
-    END IF;
+    -- xxx_ad: unused alternative text-mode address calculation.
+    -- Kept for reference in case needed for debugging or PAL/NTSC switching work.
+    -- IF (vpos) < 13*8  + to_integer(voffset) THEN
+    --   xxx_ad <=to_unsigned(
+    --     (hpos - HOFFSET - to_integer(hshift)) / 8
+    --     + ((vpos - to_integer(voffset)) / 8) * 16,10);
+    -- ELSE
+    --   xxx_ad <=to_unsigned(512 +
+    --      (hpos - HOFFSET - to_integer(hshift)) / 8
+    --      + ((vpos - to_integer(voffset)) / 8 - 13) * 16,10);
+    -- END IF;
     
     CASE cyc IS
       WHEN 1 | 7 | 0 => -- Read text image
         IF r_csize='1' THEN -- Small chars
-          IF vpos_adj < 13*8 THEN
-            ram_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 8) * 16,10);
+          IF vpos_eff < 13*8 + to_integer(voffset) THEN
+            ram_ad <=to_unsigned(
+              ((hpos + 1024 - HOFFSET - to_integer(hshift)) MOD 1024) / 8
+              + (((vpos_eff + 1024 - to_integer(voffset)) MOD 1024) / 8) * 16,10);
           ELSE
-            ram_ad <=to_unsigned(512 + hpos_adj / 8 + (vpos_adj / 8 - 13) * 16,10);
+            ram_ad <=to_unsigned((512 +
+              ((hpos + 1024 - HOFFSET - to_integer(hshift)) MOD 1024) / 8
+              + ((((vpos_eff + 1024 - to_integer(voffset)) MOD 1024) / 8) - 13) * 16) MOD 1024,10);
           END IF;
           
         ELSE -- High chars
-          ram_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 16) * 16,10);
+          ram_ad <=to_unsigned(
+            ((hpos + 1024 - HOFFSET - to_integer(hshift)) MOD 1024) / 8
+            + (((vpos_eff + 1024 - to_integer(voffset)) MOD 1024) / 16) * 16,10);
         END IF;
         
       WHEN 2 => -- Read user character shape
         IF r_csize='1' THEN
           ram_ad <= to_unsigned(384 + to_integer(ram_dr(2 DOWNTO 0)) * 8 +
-                                (vpos_adj MOD 8),10);
+                                 ((vpos_eff + 256 - to_integer(voffset)) MOD 8),10);
         ELSE
-         ram_ad <= to_unsigned(384 + to_integer(ram_dr(2 DOWNTO 0)) * 8 +
-                                ((vpos_adj)/2 MOD 8),10);
+          ram_ad <= to_unsigned(384 + to_integer(ram_dr(2 DOWNTO 0)) * 8 +
+                                 (((vpos_eff + 256 - to_integer(voffset)) / 2) MOD 8),10);
         END IF;
         
       WHEN 3 => -- Read object 1 shape
-        ram_ad <=objadrs(vpos,o1_vc,o1_size,0);
+        ram_ad <=objadrs(vpos_eff,o1_vc,o1_size,0);
         
       WHEN 4 =>
-        ram_ad <=objadrs(vpos,o2_vc,o2_size,1);
+        ram_ad <=objadrs(vpos_eff,o2_vc,o2_size,1);
         
       WHEN 5 =>
-        ram_ad <=objadrs(vpos,o3_vc,o3_size,2);
+        ram_ad <=objadrs(vpos_eff,o3_vc,o3_size,2);
         
       WHEN 6 =>
-        ram_ad <=objadrs(vpos,o4_vc,o4_size,3);
+        ram_ad <=objadrs(vpos_eff,o4_vc,o4_size,3);
         
     END CASE;
-
   END PROCESS MadMux;
 
   ------------------------------------------------------------------------------
@@ -503,34 +572,24 @@ BEGIN
       NULL;
     ELSIF rising_edge(clk) THEN
       --------------------------------------------
+      -- PAL/NTSC video timing (np=0: NTSC, np=1: PAL)
       IF np='0' THEN
         -- NTSC
         hlen <=227;
         hsync<=224;
-        hdisp<=222;
+        hdisp<=160;
         vlen <=262;
-        vsync<=253;
-        vdisp<=252;
+        vsync<=228;
+        vdisp<=226;
       ELSE
         -- PAL
-        hlen <=284;
-        hsync<=280;
-        hdisp<=228;
+        hlen <=227;
+        hsync<=220;
+        hdisp<=160;
         vlen <=312;
-        vsync<=260;
-        vdisp<=252;
+        vsync<=270;
+        vdisp<=268;
       END IF;
-
-
-      -- hlen <=227;
-      -- hsync<=200;
-      -- hdisp<=184;
-      
-      -- vlen <=312;
-      -- vsync<=269;
-      -- vdisp<=268;
-
-      -- vsync<=270;
       
       --------------------------------------------
       -- Collisions pulses
@@ -574,20 +633,20 @@ BEGIN
           bg_hit<='0';
 
           IF r_csize='1' THEN -- Small chars
-            IF vpos<to_integer(voffset) THEN
+            IF vpos_eff<to_integer(voffset) THEN
               dmarow<=to_unsigned(15,4);
-            ELSIF vpos<to_integer(voffset)+8*13 THEN
-              dmarow<=to_unsigned((vpos-to_integer(voffset))/8,4);
-            ELSIF vpos<to_integer(voffset)+8*13*2 AND r_ref='1' THEN
-              dmarow<=to_unsigned((vpos-to_integer(voffset))/8-13,4);
+            ELSIF vpos_eff<to_integer(voffset)+8*13 THEN
+              dmarow<=to_unsigned((vpos_eff-to_integer(voffset))/8,4);
+            ELSIF vpos_eff<to_integer(voffset)+8*13*2 AND r_ref='1' THEN
+              dmarow<=to_unsigned((vpos_eff-to_integer(voffset))/8-13,4);
             ELSE
               dmarow<=to_unsigned(13,4);
             END IF;
           ELSE -- Tall chars
-            IF vpos<to_integer(voffset) THEN
+            IF vpos_eff<to_integer(voffset) THEN
               dmarow<=to_unsigned(15,4);
-            ELSIF vpos<to_integer(voffset)+16*13 THEN
-              dmarow<=to_unsigned((vpos-to_integer(voffset))/16,4);
+            ELSIF vpos_eff<to_integer(voffset)+16*13 THEN
+              dmarow<=to_unsigned((vpos_eff-to_integer(voffset))/16,4);
             ELSE
               dmarow<=to_unsigned(13,4);
             END IF;
@@ -630,16 +689,16 @@ BEGIN
           m:=true;
 
           IF r_csize='0' OR r_ref='1' THEN -- Full scree
-            IF vpos<to_integer(voffset) OR --to_integer(voffset)>=128 OR
-              vpos>=to_integer(voffset)+8*26 OR
+            IF vpos_eff<to_integer(voffset) OR --to_integer(voffset)>=128 OR
+              vpos_eff>=to_integer(voffset)+8*26 OR
               hpos<HOFFSET+to_integer(hshift) OR
               hpos>=16*8+HOFFSET+to_integer(hshift) THEN
               m:=false;
             END IF;
 
           ELSE -- Half, small chars
-            IF vpos<to_integer(voffset) OR --to_integer(voffset)>=128 OR
-              vpos>=to_integer(voffset)+8*13 OR
+            IF vpos_eff<to_integer(voffset) OR --to_integer(voffset)>=128 OR
+              vpos_eff>=to_integer(voffset)+8*13 OR
               hpos<HOFFSET+to_integer(hshift) OR
               hpos>=16*8+HOFFSET+to_integer(hshift) THEN
               m:=false;
@@ -673,12 +732,14 @@ BEGIN
             gmode<='0';
             h:=false;
             
-          ELSIF r_csize='1' THEN -- 16x13 mode
-            h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift)) MOD 8,
-                   ((vpos-to_integer(voffset))/4) MOD 2,dm_v,ch);
-          ELSE -- 16x26 mode
-            h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift)) MOD 8,
-                   ((vpos-to_integer(voffset))/8) MOD 2,dm_v,ch);
+          ELSIF m AND r_csize='1' THEN -- 16x13 mode
+            h:=pix(gmode,(hpos + 256 - HOFFSET - to_integer(hshift)) MOD 8,
+                   (((vpos_eff + 256 - to_integer(voffset)) / 4) MOD 2),dm_v,ch);
+          ELSIF m THEN -- 16x26 mode
+            h:=pix(gmode,(hpos + 256 - HOFFSET - to_integer(hshift)) MOD 8,
+                   (((vpos_eff + 256 - to_integer(voffset)) / 8) MOD 2),dm_v,ch);
+          ELSE
+            h:=false;
           END IF;
           
           bg_hit<=to_std_logic(h AND m);
@@ -690,39 +751,47 @@ BEGIN
           END IF;
           
         WHEN 4 => -- Object 1
-          i:=7- ((hpos-to_integer(o1_hc)) MOD 8);
-          h:=objhit(hpos,vpos,o1_hc,o1_vc,o1_size);
+          h:=objhit(objhpos(hpos,hshift),vpos_eff,o1_hc,o1_vc,o1_size);
           
-          IF h AND ram_dr(i)='1' THEN
-            o1_hit<='1';
-            col_grb<=o1_col;
+          IF h THEN
+            i:=7- objpix(hpos, hshift, o1_hc);
+            IF ram_dr(i)='1' THEN
+              o1_hit<='1';
+              col_grb<=o1_col;
+            END IF;
           END IF;
           
         WHEN 5 => -- Object 2
-          i:=7- ((hpos-to_integer(o2_hc)) MOD 8);
-          h:=objhit(hpos,vpos,o2_hc,o2_vc,o2_size);
+          h:=objhit(objhpos(hpos,hshift),vpos_eff,o2_hc,o2_vc,o2_size);
           
-          IF h AND ram_dr(i)='1' THEN
-            o2_hit<='1';
-            col_grb<=o2_col;
+          IF h THEN
+            i:=7- objpix(hpos, hshift, o2_hc);
+            IF ram_dr(i)='1' THEN
+              o2_hit<='1';
+              col_grb<=o2_col;
+            END IF;
           END IF;
           
         WHEN 6 => -- Object 3
-          i:=7- ((hpos-to_integer(o3_hc)) MOD 8);
-          h:=objhit(hpos,vpos,o3_hc,o3_vc,o3_size);
+          h:=objhit(objhpos(hpos,hshift),vpos_eff,o3_hc,o3_vc,o3_size);
           
-          IF h AND ram_dr(i)='1' THEN
-            o3_hit<='1';
-            col_grb<=o3_col;
+          IF h THEN
+            i:=7- objpix(hpos, hshift, o3_hc);
+            IF ram_dr(i)='1' THEN
+              o3_hit<='1';
+              col_grb<=o3_col;
+            END IF;
           END IF;
           
         WHEN 7 => -- Object 4
-          i:=7- ((hpos-to_integer(o4_hc)) MOD 8);
-          h:=objhit(hpos,vpos,o4_hc,o4_vc,o4_size);
+          h:=objhit(objhpos(hpos,hshift),vpos_eff,o4_hc,o4_vc,o4_size);
           
-          IF h AND ram_dr(i)='1' THEN
-            o4_hit<='1';
-            col_grb<=o4_col;
+          IF h THEN
+            i:=7- objpix(hpos, hshift, o4_hc);
+            IF ram_dr(i)='1' THEN
+              o4_hit<='1';
+              col_grb<=o4_col;
+            END IF;
           END IF;
           
       END CASE;
@@ -731,9 +800,20 @@ BEGIN
       vid_vsyn<=to_std_logic(vpos>vsync);
       vrle    <=to_std_logic(vpos>vsync);
       vrle_pre<=vrle;
+      -- DEBUG: log vertical blanking transitions for PAL/NTSC timing debug
+      IF vrle /= vrle_pre THEN
+        REPORT "VRLE changed: vpos=" & integer'image(vpos) &
+               " vsync=" & integer'image(vsync) &
+               " vrle=" & std_logic'image(vrle) SEVERITY NOTE;
+      END IF;
       hrle    <=to_std_logic(hpos>hsync);
       hrle_pre<=hrle;
-      vid_de  <=to_std_logic(hpos<hdisp AND vpos<vdisp);
+      -- NTSC vertical offset adjustment for display enable
+      IF np='0' THEN
+        vid_de  <=to_std_logic(hpos<hdisp AND vpos>=NTSC_VOFFSET_ADJ AND vpos<vdisp);
+      ELSE
+        vid_de  <=to_std_logic(hpos<hdisp AND vpos<vdisp);
+      END IF;
       
       vid_ce<=to_std_logic(cyc=0);
       
