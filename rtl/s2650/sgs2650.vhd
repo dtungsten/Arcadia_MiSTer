@@ -154,7 +154,7 @@ BEGIN
   Comb:PROCESS(dr,psl,psu,iar,state,req_i,ack,
                r0,r1,r1b,r2,r2b,r3,r3b,ru,rras,
                int,ivec,ph_i,intp,dec,
-               ad_i,wr_i,dw_i,ri,rh,indexed) IS
+               ad_i,wr_i,dw_i,ri,rh,indexed,sense) IS
     VARIABLE rs_v,rd_v,psl_v : uv8;
     VARIABLE rd_mav : std_logic;
     VARIABLE cond_v : boolean;
@@ -803,8 +803,10 @@ BEGIN
           
       END CASE;
       
-      ---------------------------------------------
     END IF;
+    
+    ---------------------------------------------
+    psu_c(7)<=sense;
   END PROCESS Comb;
   
   --############################################################################
@@ -886,6 +888,12 @@ BEGIN
       
       --------------------------------------------
       psu(7)<=sense;
+      -- DEBUG: log sense input changes for Doraemon lockup debug
+      IF psu_c(7) /= sense THEN
+        REPORT "PSU(7) change: psu_c(7)=" & std_logic'image(psu_c(7)) &
+               " sense=" & std_logic'image(sense) &
+               " at " & time'image(now) SEVERITY NOTE;
+      END IF;
       
       --------------------------------------------
       IF reset='1' THEN

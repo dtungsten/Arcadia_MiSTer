@@ -178,7 +178,7 @@ BEGIN
       wr        => wr,
       tick      => tick_cpu,
       vid_argb  => vga_argb,
-      vid_de    => vga_de,
+      vid_de    => vga_dei,
       vid_hsyn  => vga_hsyn,
       vid_vsyn  => vga_vsyn,
       vid_ce    => vga_ce,
@@ -191,7 +191,8 @@ BEGIN
       np        => ntsc_pal,
       reset     => reset,
       clk       => clk,
-      reset_na  => reset_na);
+      reset_na  => reset_na,
+      clear_ram => ioctl_download);
   
   --   1 2 3
   --   4 5 6
@@ -464,6 +465,7 @@ BEGIN
   clk_video<=clk;
   ce_pixel<=vga_ce WHEN rising_edge(clk);
   
+  -- Register vga_de for proper timing alignment (fixed NTSC color issue)
   vga_de<=vga_dei  WHEN rising_edge(clk);
   vga_hs<=vga_hsyn WHEN rising_edge(clk);
   vga_vs<=vga_vsyn WHEN rising_edge(clk);
