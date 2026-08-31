@@ -175,7 +175,8 @@ assign HDMI_BOB_DEINT = 0;
 
 assign LED_DISK = 0;
 assign LED_POWER = 0;
-assign BUTTONS = 0;
+reg close_osd = 0;
+assign BUTTONS = {1'b0, close_osd};
 
 //////////////////////////////////////////////////////////////////
 
@@ -189,7 +190,7 @@ localparam CONF_STR = {
 	"Arcadia;;",
 	"-;",
 	"F,BIN,Load Cartridge;",
-	//"O5,Video standard,PAL,NTSC;",
+	"O2,Video standard,NTSC,PAL;",
 	"O3,Auto-Center,On,Off;",
 	"O4,Swap Joystick XY,Off,On;",
 	"O5,D-Pad Analog Emulation,Off,On;",
@@ -521,16 +522,18 @@ end
 
 /////////////////////// CLOCKS ///////////////////////////////
 
-wire clksys,clksys_ntsc,clksys_pal,pll_locked;
-assign clksys = clksys_pal;
+wire clksys, pll_locked;
+wire [63:0] reconfig_to_pll, reconfig_from_pll;
 
 pll pll
 (
 	.refclk(CLK_50M),
 	.rst(0),
-	.outclk_0(clksys_ntsc),
-	.outclk_1(clksys_pal),
-	.locked(pll_locked)
+	.outclk_0(clksys),
+	.outclk_1(),
+	.locked(pll_locked),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll)
 );
 
   
@@ -538,7 +541,103 @@ pll pll
    NTSC : 3.579545MHz   * 8
    PAL  : 4.43361875MHz * 8
 */
-wire reset = RESET | status[0] | buttons[1];
+// PLL reconfiguration
+wire cfg_waitrequest;
+reg  cfg_write;
+reg  [5:0] cfg_address;
+reg  [31:0] cfg_data;
+
+pll_cfg pll_cfg
+(
+	.mgmt_clk(CLK_50M),
+	.mgmt_reset(0),
+	.mgmt_waitrequest(cfg_waitrequest),
+	.mgmt_read(0),
+	.mgmt_readdata(),
+	.mgmt_write(cfg_write),
+	.mgmt_address(cfg_address),
+	.mgmt_writedata(cfg_data),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll)
+);
+
+reg ntsc_r = 0;
+always @(posedge CLK_50M) begin
+	reg ntscd = 0, ntscd2 = 0;
+	reg [2:0] state = 0;
+	reg [23:0] delay = 0;
+	reg osd_s1 = 0, osd_s2 = 0;
+
+	osd_s1 <= OSD_STATUS;
+	osd_s2 <= osd_s1;
+
+	ntscd  <= status[2];
+	ntscd2 <= ntscd;
+
+	cfg_write <= 0;
+	close_osd <= 0;
+
+	if(ntscd2 != ntsc_r) begin
+		if(osd_s2 && delay < 24'd2500000) begin // 50ms pulse to close OSD
+			close_osd <= 1;
+			delay <= delay + 1'd1;
+		end else if (delay < 24'd25000000) begin // 500ms total delay
+			delay <= delay + 1'd1;
+		end else begin
+			state <= 1;
+			ntsc_r <= ntscd2;
+			delay <= 0;
+		end
+	end else begin
+		delay <= 0;
+	end
+
+	if(!cfg_waitrequest) begin
+		if(state) state<=state+1'd1;
+		case(state)
+			1: begin
+					cfg_address <= 0;
+					cfg_data <= 0;
+					cfg_write <= 1;
+				end
+			3: begin
+					cfg_address <= 5;
+					cfg_data <= 32'h00000005;
+					cfg_write <= 1;
+				end
+			5: begin
+					cfg_address <= 6;
+					cfg_data <= ntsc_r ? 32'h00060B0A : 32'h00000D0D;
+					cfg_write <= 1;
+				end
+			7: begin
+					// M counter write removed — was setting M=0 and breaking VCO
+				end
+		endcase
+	end
+end
+
+// Reset on video standard change
+reg ntsc_sys1 = 0, ntsc = 0, ntsc_prev = 0;
+reg [20:0] reset_counter = 0;
+reg reset_reg = 0;
+
+always @(posedge clksys) begin
+	ntsc_sys1 <= ntsc_r;
+	ntsc <= ntsc_sys1;
+	ntsc_prev <= ntsc;
+	
+	if (RESET | status[0] | buttons[1] | !pll_locked | (ntsc_prev != ntsc)) begin
+		reset_counter <= 21'd1500000;
+	end
+	else if (reset_counter != 0) begin
+		reset_counter <= reset_counter - 1;
+	end
+	
+	reset_reg <= (reset_counter != 0);
+end
+
+wire reset = RESET | status[0] | buttons[1] | reset_reg;
 
 //////////////////////////////////////////////////////////////////
 
@@ -551,7 +650,7 @@ arcadia_core arcadia_core
 	.OSD_STATUS(OSD_STATUS),
 	.pause_osd(status[9]),
 
-	.ntsc_pal(1'b1),
+	.ntsc_pal(ntsc),  // 0 = NTSC, 1 = PAL
 	.swapxy(status[4]),
 	.swap_controllers(status[8]),
 

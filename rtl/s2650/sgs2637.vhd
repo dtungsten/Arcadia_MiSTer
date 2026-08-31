@@ -243,8 +243,6 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL hpos,hlen,hsync,hdisp : uint9;
   SIGNAL vpos,vlen,vsync,vdisp : uint9;
   SIGNAL vpos_eff : uint9;
-  -- NTSC vertical offset adjustment (0 = no adjustment, tune to match WinArcadia framing)
-  CONSTANT NTSC_VOFFSET_ADJ : integer := 0;
 
   SIGNAL gmode : std_logic;
   
@@ -479,10 +477,7 @@ BEGIN
 
   ------------------------------------------------------------------------------
   -- Memory address mux
-  -- NTSC vertical offset to match WinArcadia framing
-  vpos_eff <= vpos - NTSC_VOFFSET_ADJ WHEN np='0' AND vpos >= NTSC_VOFFSET_ADJ ELSE
-              0 WHEN np='0' ELSE
-              vpos;
+  vpos_eff <= vpos;
 
 MadMux:PROCESS(ram_dr,vpos_eff,voffset,hpos,hshift,r_csize,
                  o1_size,o2_size,o3_size,o4_size,
@@ -579,8 +574,8 @@ MadMux:PROCESS(ram_dr,vpos_eff,voffset,hpos,hshift,r_csize,
         hsync<=224;
         hdisp<=160;
         vlen <=262;
-        vsync<=228;
-        vdisp<=226;
+        vsync<=241;
+        vdisp<=240;
       ELSE
         -- PAL
         hlen <=227;
@@ -808,12 +803,7 @@ MadMux:PROCESS(ram_dr,vpos_eff,voffset,hpos,hshift,r_csize,
       END IF;
       hrle    <=to_std_logic(hpos>hsync);
       hrle_pre<=hrle;
-      -- NTSC vertical offset adjustment for display enable
-      IF np='0' THEN
-        vid_de  <=to_std_logic(hpos<hdisp AND vpos>=NTSC_VOFFSET_ADJ AND vpos<vdisp);
-      ELSE
-        vid_de  <=to_std_logic(hpos<hdisp AND vpos<vdisp);
-      END IF;
+      vid_de  <=to_std_logic(hpos<hdisp AND vpos<vdisp);
       
       vid_ce<=to_std_logic(cyc=0);
       
