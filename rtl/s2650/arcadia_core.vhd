@@ -481,7 +481,8 @@ BEGIN
   ----------------------------------------------------------
   -- ROM / RAM
 
-  wcart<=wr AND req AND ack; -- WHEN ad(12)='0' ELSE '0';
+  -- Cartridge ROM is read-only on real hardware. CPU writes blocked.
+  wcart <= '0';
   
   icart:PROCESS(clk) IS
   BEGIN
