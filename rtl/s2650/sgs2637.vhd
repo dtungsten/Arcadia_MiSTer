@@ -378,6 +378,27 @@ BEGIN
     IF reset_na='0' THEN
       ocoll_pre<='0';
       ccoll_pre<='0';
+      ocoll_clr<='0';
+      ccoll_clr<='0';
+      o1_hc<=x"00";
+      o1_vc<=x"00";
+      o2_hc<=x"00";
+      o2_vc<=x"00";
+      o3_hc<=x"00";
+      o3_vc<=x"00";
+      o4_hc<=x"00";
+      o4_vc<=x"00";
+      voffset<=x"00";
+      r_0fd<=x"00";
+      r_0fe<=x"00";
+      r_1f8<=x"00";
+      r_1f9<=x"00";
+      r_1fa<=x"00";
+      r_1fb<=x"00";
+      dr_reg<=x"00";
+      drreg_sel<='0';
+      ccoll<=x"F";
+      ocoll<="111111";
       
     ELSIF rising_edge(clk) THEN
       --------------------------------------------
@@ -546,7 +567,27 @@ BEGIN
     VARIABLE dm_v : uv8;
   BEGIN
     IF reset_na='0' THEN
-      NULL;
+      hpos<=0;
+      vpos<=0;
+      cyc<=0;
+      gmode<='0';
+      dmarow<=x"0";
+      vrle<='0';
+      vrle_pre<='0';
+      hrle<='0';
+      hrle_pre<='0';
+      hpulse<='0';
+      col_grb<="000";
+      o1_hit<='0';
+      o2_hit<='0';
+      o3_hit<='0';
+      o4_hit<='0';
+      bg_hit<='0';
+      vid_argb<="0000";
+      vid_hsyn<='0';
+      vid_vsyn<='0';
+      vid_de<='0';
+      vid_ce<='0';
     ELSIF rising_edge(clk) THEN
       --------------------------------------------
       IF np='0' THEN
@@ -799,10 +840,13 @@ BEGIN
   vrst<=vrle;
   
   ------------------------------------------------------------------------------
-  Sono:PROCESS(clk) IS
+  Sono:PROCESS(clk, reset_na) IS
   BEGIN
-
-    IF rising_edge(clk) THEN
+    IF reset_na='0' THEN
+      snd_cpt<="0000000";
+      stog<='0';
+      lfsr<=(OTHERS => '0');
+    ELSIF rising_edge(clk) THEN
       IF hpulse='1' THEN
         IF snd_cpt<r_freq THEN
           snd_cpt<=snd_cpt+1;
