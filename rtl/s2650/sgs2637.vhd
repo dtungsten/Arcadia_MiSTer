@@ -98,6 +98,7 @@ ENTITY sgs2637 IS
     pot4     : IN uv8;
 
     np       : IN std_logic; -- 0=NTSC 60Hz, 1=PAL 50Hz
+    flag     : IN std_logic; -- CPU Flag output (PSU bit 6): inverts all colors when high
     
     reset    : IN std_logic;
     clk      : IN std_logic; -- 8x Pixel clock
@@ -362,6 +363,21 @@ BEGIN
   
   ack<='1';
 
+  -- pragma synthesis_off
+  DumpVRAM: PROCESS
+    FILE f : text OPEN write_mode IS "vram_dump.txt";
+    VARIABLE l : line;
+  BEGIN
+    WAIT FOR 10 ms;
+    FOR i IN 0 TO 1023 LOOP
+      write(l, integer'image(i) & ":" & integer'image(to_integer(ram(i))));
+      writeline(f, l);
+    END LOOP;
+    FILE_CLOSE(f);
+    WAIT;
+  END PROCESS;
+  -- pragma synthesis_on
+
   wreq<=wr AND req AND tick;
   adi <= ad(11 DOWNTO 0) - (ad(11) & "00000000000");
 
@@ -393,11 +409,18 @@ BEGIN
       dr_mem<=ram(to_integer(adi(9 DOWNTO 0)));
 
       IF wreq='1' THEN
-        -- DEBUG: log 2637 register writes (F0-FF, 1F8-1FB) for debugging
-        IF adi(9 DOWNTO 4)=x"0F" OR adi(9 DOWNTO 4)=x"1F" THEN
-          REPORT "2637 reg write " & integer'image(to_integer(adi(9 DOWNTO 0))) &
-                 " = " & integer'image(to_integer(dw)) SEVERITY NOTE;
-        END IF;
+        -- DEBUG: log 2637 register writes and VRAM writes (disabled for speed)
+        -- Enable selectively when debugging specific games.
+        -- IF adi(9 DOWNTO 4)=x"0F" OR adi(9 DOWNTO 4)=x"1F" THEN
+        --   REPORT "2637 reg write " & integer'image(to_integer(adi(9 DOWNTO 0))) &
+        --          " = " & integer'image(to_integer(dw)) SEVERITY NOTE;
+        -- END IF;
+        -- IF (adi(9 DOWNTO 0) < 208) OR (adi(9 DOWNTO 0) >= 512 AND adi(9 DOWNTO 0) < 720) THEN
+        --   IF dw /= x"00" THEN
+        --     REPORT "2637 VRAM write " & integer'image(to_integer(adi(9 DOWNTO 0))) &
+        --            " = " & integer'image(to_integer(dw)) SEVERITY NOTE;
+        --   END IF;
+        -- END IF;
         ram(to_integer(adi(9 DOWNTO 0)))<=dw;
       END IF;
       
@@ -415,7 +438,7 @@ BEGIN
         WHEN x"0F5" =>  IF wreq='1' THEN o3_hc<=dw; END IF;
         WHEN x"0F6" =>  IF wreq='1' THEN o4_vc<=NOT dw; END IF;
         WHEN x"0F7" =>  IF wreq='1' THEN o4_hc<=dw; END IF;
-        WHEN x"0FC" =>  IF wreq='1' THEN voffset<=NOT dw - 1; END IF;
+        WHEN x"0FC" =>  IF wreq='1' THEN voffset<=NOT dw; END IF;
         WHEN x"0FD" =>  IF wreq='1' THEN r_0fd<=dw; END IF;
         WHEN x"0FE" =>  IF wreq='1' THEN r_0fe<=dw; END IF;
         WHEN x"0FF" =>  dr_reg<="1111" & dmarow; drreg_sel<='1';
@@ -658,7 +681,9 @@ MadMux:PROCESS(ram_dr,vpos_eff,voffset,hpos,hshift,r_csize,
           o3c_coll<=o3_hit AND bg_hit;
           o4c_coll<=o4_hit AND bg_hit;
 
-          vid_argb<='1' & NOT (col_grb(1) & col_grb(2) & col_grb(0));
+          -- Flag inversion: when CPU Flag (PSU bit 6) is high, all colors are inverted
+          -- (code 4=purple becomes green, code 0=white becomes black, etc.)
+          vid_argb <= '1' & (NOT(col_grb(1) & col_grb(2) & col_grb(0)) XOR (flag & flag & flag));
 
         WHEN 1 =>
           -- Wait !
@@ -795,12 +820,12 @@ MadMux:PROCESS(ram_dr,vpos_eff,voffset,hpos,hshift,r_csize,
       vid_vsyn<=to_std_logic(vpos>vsync);
       vrle    <=to_std_logic(vpos>vsync);
       vrle_pre<=vrle;
-      -- DEBUG: log vertical blanking transitions for PAL/NTSC timing debug
-      IF vrle /= vrle_pre THEN
-        REPORT "VRLE changed: vpos=" & integer'image(vpos) &
-               " vsync=" & integer'image(vsync) &
-               " vrle=" & std_logic'image(vrle) SEVERITY NOTE;
-      END IF;
+      -- DEBUG: log vertical blanking transitions (disabled for speed)
+      -- IF vrle /= vrle_pre THEN
+      --   REPORT "VRLE changed: vpos=" & integer'image(vpos) &
+      --          " vsync=" & integer'image(vsync) &
+      --          " vrle=" & std_logic'image(vrle) SEVERITY NOTE;
+      -- END IF;
       hrle    <=to_std_logic(hpos>hsync);
       hrle_pre<=hrle;
       vid_de  <=to_std_logic(hpos<hdisp AND vpos<vdisp);

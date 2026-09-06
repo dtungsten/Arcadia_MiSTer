@@ -189,6 +189,7 @@ BEGIN
       pot3      => potr_h,
       pot4      => potl_h,
       np        => ntsc_pal,
+      flag      => flag,
       reset     => reset,
       clk       => clk,
       reset_na  => reset_na,
@@ -458,6 +459,13 @@ BEGIN
       END IF;
     END IF;
   END PROCESS Dump;
+
+  -- DEBUG: probe vrst/sense toggling (disabled for speed - re-enable when needed)
+  -- SenseProbe:PROCESS (vrst) IS
+  -- BEGIN
+  --   REPORT "VRST changed to " & std_logic'image(vrst) &
+  --          " at " & time'image(now) SEVERITY NOTE;
+  -- END PROCESS SenseProbe;
 
 --pragma synthesis_on
   ----------------------------------------------------------
