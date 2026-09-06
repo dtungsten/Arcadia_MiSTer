@@ -386,7 +386,7 @@ PACKAGE BODY base_pack IS
   END FUNCTION mux;
   
   --------------------------------------
-  -- Étend un vecteur avec extension de signe
+  -- Extend un vecteur avec extension de signe
   FUNCTION sext (
     e : unsigned;
     l : natural) RETURN unsigned IS
@@ -399,7 +399,7 @@ PACKAGE BODY base_pack IS
   END FUNCTION sext;
   
   --------------------------------------
-  -- Étend un vecteur avec extension de signe
+  -- Extend un vecteur avec extension de signe
   FUNCTION sext (
     e : std_logic;
     l : natural) RETURN unsigned IS
@@ -411,7 +411,7 @@ PACKAGE BODY base_pack IS
   END FUNCTION sext;
   
    --------------------------------------
-  -- Étend un vecteur sans extension de signe
+  -- Extend un vecteur sans extension de signe
   FUNCTION uext (
     e : unsigned;
     l : natural) RETURN unsigned IS
@@ -424,7 +424,7 @@ PACKAGE BODY base_pack IS
   END FUNCTION uext;
   
   --------------------------------------
-  -- Étend un vecteur sans extension de signe 
+  -- Extend un vecteur sans extension de signe 
   FUNCTION uext (
     e : std_logic;
     l : natural) RETURN unsigned IS
@@ -471,7 +471,7 @@ PACKAGE BODY base_pack IS
     i:=1;
     j:=1;
     r:=(OTHERS =>' ');
-    WHILE i<v'length LOOP
+    WHILE i <= v'length - 3 LOOP
       IF x(i)='X' OR x(i+1)='X' OR x(i+2)='X' OR x(i+3)='X' THEN
         r(j):='X';
       ELSIF x(i)='U' OR x(i+1)='U' OR x(i+2)='U' OR x(i+3)='U' THEN

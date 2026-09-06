@@ -888,12 +888,12 @@ BEGIN
       
       --------------------------------------------
       psu(7)<=sense;
-      -- DEBUG: log sense input changes for Doraemon lockup debug
-      IF psu_c(7) /= sense THEN
-        REPORT "PSU(7) change: psu_c(7)=" & std_logic'image(psu_c(7)) &
-               " sense=" & std_logic'image(sense) &
-               " at " & time'image(now) SEVERITY NOTE;
-      END IF;
+      -- DEBUG: log when psu(7) changes value (disabled for speed)
+      -- IF psu(7) /= sense THEN
+      --   REPORT "PSU(7) update: old=" & std_logic'image(psu(7)) &
+      --          " new=" & std_logic'image(sense) &
+      --          " at " & time'image(now) SEVERITY NOTE;
+      -- END IF;
       
       --------------------------------------------
       IF reset='1' THEN
