@@ -103,7 +103,7 @@ ENTITY sgs2637 IS
     reset    : IN std_logic;
     clk      : IN std_logic; -- 8x Pixel clock
     reset_na : IN std_logic;
-    clear_ram : IN std_logic  -- clears video RAM when high (currently unused, logic disabled)
+    clear_ram : IN std_logic  -- clears video RAM when high (rising edge triggers clear)
     );
 END ENTITY sgs2637;
 
@@ -181,6 +181,12 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL ram : arr_uv8(0 TO 1023);
   ATTRIBUTE ramstyle : string;
   ATTRIBUTE ramstyle OF ram : SIGNAL IS "no_rw_check";
+
+  -- RAM clear state machine (sequential clear, one address per clock)
+  SIGNAL clr_run     : std_logic := '0';
+  SIGNAL clr_addr    : unsigned(9 DOWNTO 0) := (OTHERS => '0');
+  SIGNAL clear_ram_d : std_logic := '0';
+  SIGNAL reset_na_d  : std_logic := '0';
 
   SIGNAL adi : uv12;
   SIGNAL ram_ad : uv10;
@@ -340,6 +346,33 @@ BEGIN
 
   dr<=dr_reg WHEN drreg_sel='1' ELSE dr_mem;
   
+  -- RAM clear state machine: sequential clear of all 1024 bytes.
+  -- Triggered on clear_ram rising edge (new game download) or reset_na rising edge (reset release).
+  -- Uses a simple flag + counter to avoid routing congestion from parallel clear logic.
+  RamClear: PROCESS(clk, reset_na) IS
+  BEGIN
+    IF reset_na='0' THEN
+      clr_run     <= '0';
+      clr_addr    <= (OTHERS => '0');
+      clear_ram_d <= '0';
+      reset_na_d  <= '0';
+    ELSIF rising_edge(clk) THEN
+      clear_ram_d <= clear_ram;
+      reset_na_d  <= reset_na;
+      
+      IF (clear_ram='1' AND clear_ram_d='0') OR (reset_na='1' AND reset_na_d='0') THEN
+        clr_run  <= '1';
+        clr_addr <= (OTHERS => '0');
+      ELSIF clr_run='1' THEN
+        IF clr_addr = 1023 THEN
+          clr_run <= '0';
+        ELSE
+          clr_addr <= clr_addr + 1;
+        END IF;
+      END IF;
+    END IF;
+  END PROCESS RamClear;
+  
   Regs:PROCESS(clk,reset_na) IS
   BEGIN
     IF reset_na='0' THEN
@@ -351,7 +384,9 @@ BEGIN
       -- RAM
       dr_mem<=ram(to_integer(adi(9 DOWNTO 0)));
 
-      IF wreq='1' THEN
+      IF clr_run='1' THEN
+        ram(to_integer(clr_addr)) <= x"00";
+      ELSIF wreq='1' THEN
         -- DEBUG: log 2637 register writes and VRAM writes (disabled for speed)
         -- IF adi(9 DOWNTO 4)=x"0F" OR adi(9 DOWNTO 4)=x"1F" THEN
         --   REPORT "2637 reg write " & integer'image(to_integer(adi(9 DOWNTO 0))) &
