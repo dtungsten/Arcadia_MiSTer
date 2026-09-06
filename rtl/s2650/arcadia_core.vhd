@@ -326,13 +326,18 @@ BEGIN
 
 
   auto_swapxy <= '1' WHEN
-       crc32_final = x"4DA68DF8"  -- 3D Soccer (Emerson)
+       crc32_final = x"EF110A16"  -- 3D Attack
+    OR crc32_final = x"4DA68DF8"  -- 3D Soccer (Emerson)
     OR crc32_final = x"1B5BE22A"  -- 3D Soccer (Tele-Fever)
     OR crc32_final = x"77C19320"  -- Funky Fish
+    OR crc32_final = x"1CEC4B21"  -- Hobo
     OR crc32_final = x"97060A54"  -- Jump Bug (Emerson)
     OR crc32_final = x"DC0264B8"  -- Jump Bug (Tele-Fever)
+    OR crc32_final = x"1241F128"  -- Mobile Soldier Gundam
+    OR crc32_final = x"8169864E"  -- Route 16
     OR crc32_final = x"BB88DAEA"  -- Spiders
     OR crc32_final = x"F9D9EC5B"  -- Spiders (overdump)
+    OR crc32_final = x"4C885AF2"  -- Super Dimension Fortress Macross
     OR crc32_final = x"E66F362D"  -- The End
     OR crc32_final = x"566C78A0"  -- The End (enhanced)
     OR crc32_final = x"306E39C1"  -- Turtles/Turpin
