@@ -183,7 +183,7 @@ ARCHITECTURE rtl OF sgs2637 IS
   ATTRIBUTE ramstyle OF ram : SIGNAL IS "no_rw_check";
 
   SIGNAL adi : uv12;
-  SIGNAL ram_ad,xxx_ad : uv10;
+  SIGNAL ram_ad : uv10;
   SIGNAL ram_dr,rom_dr,ch : uv8;
   SIGNAL dr_reg,dr_mem : uv8;
   SIGNAL drreg_sel : std_logic;
@@ -315,7 +315,6 @@ ARCHITECTURE rtl OF sgs2637 IS
   
   ------------------------------------------------
 
-  SIGNAL xxx_bg : boolean;
   
 BEGIN
   
@@ -453,12 +452,6 @@ BEGIN
       rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + (vpos_adj MOD 8);
     ELSE
       rom_ad <= (ram_dr(5 DOWNTO 0) & "000") + ((vpos_adj/2) MOD 8);
-    END IF;
-    
-    IF vpos_adj < 13*8 THEN
-      xxx_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 8) * 16,10);
-    ELSE
-      xxx_ad <=to_unsigned(512 + hpos_adj / 8 + (vpos_adj / 8 - 13) * 16,10);
     END IF;
     
     CASE cyc IS
@@ -681,8 +674,6 @@ BEGIN
           --    m:=false; 
           --  END IF;
           --END IF;
-          
-          xxx_bg<=m;
           
           IF ch=x"C0" AND m THEN -- Set GMODE special char
             gmode<='1';
