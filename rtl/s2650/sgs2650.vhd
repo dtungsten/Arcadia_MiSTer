@@ -379,11 +379,12 @@ BEGIN
                   WHEN ZBRR => -- Zero Branch, Relative, unconditional
                     state_c<=sWAIT;
                     ad_c <="00000000" & dr(6 DOWNTO 0);
-                    iar_c<="00000000" & dr(6 DOWNTO 0);
                     IF dr(7)='1' THEN -- INDIRECT
+                      -- Target resolved in sINDIRECT2; do not set iar_c here
                       ph_c<=phINDIRECT;
                       state_c<=sINDIRECT;
                     ELSE
+                      iar_c<="00000000" & dr(6 DOWNTO 0);
                       ph_c<=phCODE;
                       state_c<=sWAIT;
                     END IF;
@@ -411,11 +412,14 @@ BEGIN
                   WHEN ZBSR => -- Zero Branch to Sub, Relative, unconditional
                     pushsub_c<='1';
                     ad_c <="00000000" & dr(6 DOWNTO 0);
-                    iar_c<="00000000" & dr(6 DOWNTO 0);
                     IF dr(7)='1' THEN -- INDIRECT
+                      -- Target resolved in sINDIRECT2; do not set iar_c here.
+                      -- Return address pushed is iar+1 at pushsub time, which
+                      -- is the instruction after this one (correct).
                       ph_c<=phINDIRECT;
                       state_c<=sINDIRECT;
                     ELSE
+                      iar_c<="00000000" & dr(6 DOWNTO 0);
                       ph_c<=phCODE;
                       state_c<=sWAIT;
                     END IF;
@@ -687,7 +691,9 @@ BEGIN
                    BRN  |  -- Branch on register non-zero, Absolute
                    BIDR |  -- Branch on Inc / Dec Register, Absolute
                    BSTF |  -- Branch to sub on condition True/False Relative
-                   BSN  => -- Branch to sub on register non-zero, Relative
+                   BSN  |  -- Branch to sub on register non-zero, Relative
+                   ZBRR |  -- Zero Branch, Relative, unconditional (indirect)
+                   ZBSR => -- Zero Branch to Sub, Relative, unconditional (indirect)
                 state_c<=sOPCODE;
                 iar_c<=rh(6 DOWNTO 0) & dr;
                 ad_c <=rh(6 DOWNTO 0) & dr;
@@ -819,6 +825,11 @@ BEGIN
       psu_sp<="000";
       psu_ii<='0';
       psl<=x"00";
+      -- General-purpose registers MUST be reset in synthesis. These were
+      -- previously wrapped in pragma synthesis_off/on which caused the
+      -- synthesizer to skip the reset paths entirely, leaving stale register
+      -- values across resets. This corrupted game initialization (e.g. Circus
+      -- seesaw/balloon rendering glitch after mode swaps or resets).
       r0<=x"00";
       r1<=x"00";
       r2<=x"00";
