@@ -157,31 +157,60 @@ Leave Off when adjusting video settings that need a live picture.
 
 ## Known Issues
 
-- **3D Attack** doesn't boot properly
-- **3D Soccer:** graphics corruption
 - **Alien Invaders:** graphic corruption, missile launcher is forced to the right.
 - **Basketball:** This game just controls very weird, not a glitch.
 - **Black Jack & Poker:** doesn't boot properly
 - **Circus:** requires analog stick input or D-pad emulation
-- **Crazy Climber:** Graphical issues.
-- **Doraemon:** locks up at the playfield load
-- **Dr. Slump:** locks up
 - **Escape:** doesn't play right
 - **Frogger:** graphics corruption - a known ROM issue
-- **Funky Fish:** locks up
 - **Golf:** unable to start
 - **Grand Slam Tennis:** graphics corruption, unable to start
-- **Hobo:** locks up
 - **Horse Racing:** unable to start game
-- **Mobile Soldier Gundam:** graphics corruption, can't start play
 - **Monaco Grand Prix:** controls are just weird, not a glitch
 - **Ocean Battle:** analog input supported for ships dropping depth charges
 - **Robot Killer:** unable to control properly
-- **Route 16:** game doesn't start
 - **Star Chess:** graphics corruption
-- **Super Dimension Fortress Macross:** doesn't boot properly.
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
+
+## Changelog 20260907
+
+- Fixed Circus glitch: CPU general-purpose registers (r0-r3, r1b-r3b) were never
+  reset in synthesis due to pragma blocks excluding them from the reset path.
+  Stale register values across resets corrupted game initialization.
+- Reset CPU clock divider on reset so the CPU starts at a consistent clock phase.
+- Reset now acts like a power cycle: creset fires on all resets (manual reset
+  triggers a full CPU sync reset). Real hardware does not do this, but it
+  provides cleaner reset behavior for the core.
+
+## Changelog 20260906
+
+- Added comprehensive register clearing on reset_na in sgs2637 (Regs/Vid/Sono).
+- Implemented sequential RAM clear on game load and reset release.
+- Removed dead xxx_ad and xxx_bg signals from sgs2637.
+- Added auto XY-swap for 3D Attack, Hobo, Gundam, Route 16, Macross.
+- Fixed Funky Fish jerky movement: removed 2*hshift from object positioning.
+
+## Changelog 20260905
+
+- Fixed To_HString bounds check, disabled PSU debug logging.
+- Implemented flag-based color inversion (PSU bit 6) matching WinArcadia.
+- Changed voffset to NOT dw (matches WinArcadia's 255 - A_VSCROLL).
+- Debug cleanup.
+
+## Changelog 20260904
+
+- Fixed wcart address gating to prevent CPU writes from corrupting cart ROM.
+  Fixed 10 games: Doraemon, Funky Fish, 3D Attack, 3D Soccer, Crazy Climber,
+  Dr. Slump, Hobo, Mobile Soldier Gundam, Route 16, Super Dimension Fortress Macross.
+
+## Changelog 20260831
+
+- Fixed aspect ratio again.
+
+## Changelog 20260830
+
+- PAL/NTSC switching working.
 
 ## Changelog 20260817
 
