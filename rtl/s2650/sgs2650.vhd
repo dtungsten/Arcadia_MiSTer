@@ -819,8 +819,6 @@ BEGIN
       psu_sp<="000";
       psu_ii<='0';
       psl<=x"00";
-
---pragma synthesis_off
       r0<=x"00";
       r1<=x"00";
       r2<=x"00";
@@ -828,7 +826,6 @@ BEGIN
       r1b<=x"00";
       r2b<=x"00";
       r3b<=x"00";
---pragma synthesis_on
             
     ELSIF rising_edge(clk) THEN
       

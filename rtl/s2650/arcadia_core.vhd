@@ -536,6 +536,7 @@ BEGIN
   BEGIN
     IF reset_na='0' THEN
       tick_cpu<='0';
+      tick_cpu_cpt<=0;
     ELSIF rising_edge(clk) THEN
       IF OSD_STATUS='1' AND pause_osd='1' THEN
         tick_cpu<='0';
@@ -550,6 +551,6 @@ BEGIN
   END PROCESS DivCLK;
   
   reset_na<=NOT reset;
-  creset<=ioctl_download;
+  creset<=ioctl_download OR reset;
   
 END struct;
