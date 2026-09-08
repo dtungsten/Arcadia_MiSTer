@@ -26,6 +26,10 @@ ENTITY arcadia_core IS
     -- Async reset from top-level module. Can be used as initial reset.
     reset            : IN    std_logic;
 
+    -- Full reset (game load or PAL/NTSC mode change). Drives comprehensive
+    -- register clearing in the 2637 and resets video/sound timing.
+    full_reset_na    : IN    std_logic;
+
     -- Must be passed to hps_io module
     ntsc_pal         : IN    std_logic;
     swapxy           : IN    std_logic;
@@ -104,6 +108,7 @@ ARCHITECTURE struct OF arcadia_core IS
   SIGNAL ivec : unsigned(7 DOWNTO 0);
   
   SIGNAL reset_na : std_logic;
+  
   SIGNAL w_d : unsigned(7 DOWNTO 0);
   SIGNAL w_a : unsigned(12 DOWNTO 0);
   SIGNAL w_wr : std_logic;
@@ -193,6 +198,7 @@ BEGIN
       reset     => reset,
       clk       => clk,
       reset_na  => reset_na,
+      full_reset_na => full_reset_na,
       clear_ram => ioctl_download);
   
   --   1 2 3
@@ -552,6 +558,9 @@ BEGIN
   END PROCESS DivCLK;
   
   reset_na<=NOT reset;
-  creset<=ioctl_download OR reset;
+  -- creset fires only on ROM download (new game load). Real Arcadia hardware
+  -- does not reset the CPU when the console reset button is pressed, so a
+  -- manual reset only resets the video/sound/register state via reset_na.
+  creset<=ioctl_download;
   
 END struct;

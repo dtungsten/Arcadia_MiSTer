@@ -625,11 +625,19 @@ end
 reg ntsc_sys1 = 0, ntsc = 0, ntsc_prev = 0;
 reg [20:0] reset_counter = 0;
 reg reset_reg = 0;
+reg mode_change_r = 0;
 
 always @(posedge clksys) begin
 	ntsc_sys1 <= ntsc_r;
 	ntsc <= ntsc_sys1;
 	ntsc_prev <= ntsc;
+	
+	// Track PAL/NTSC mode changes. Stays high for the entire reset period
+	// so the 2637 can perform a full register clear on mode change.
+	if (ntsc_prev != ntsc)
+		mode_change_r <= 1;
+	else if (reset_counter == 0)
+		mode_change_r <= 0;
 	
 	if (RESET | status[0] | buttons[1] | !pll_locked | (ntsc_prev != ntsc)) begin
 		reset_counter <= 21'd1500000;
@@ -643,6 +651,11 @@ end
 
 wire reset = RESET | status[0] | buttons[1] | reset_reg;
 
+// Full reset: game load (RESET) or PAL/NTSC mode change. Manual reset
+// (buttons[1]) and OSD reset (status[0]) do NOT trigger a full reset.
+wire full_reset = RESET | mode_change_r;
+wire full_reset_na = ~full_reset;
+
 //////////////////////////////////////////////////////////////////
 
 wire [7:0] sound;
@@ -651,6 +664,7 @@ arcadia_core arcadia_core
 (
 	.clk(clksys),
 	.reset(reset),
+	.full_reset_na(full_reset_na),
 	.OSD_STATUS(OSD_STATUS),
 	.pause_osd(status[9]),
 
@@ -682,7 +696,6 @@ arcadia_core arcadia_core
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_dout),
 	.ioctl_wait(ioctl_wait)
-    
 );
 
 assign VGA_SL = 0;
