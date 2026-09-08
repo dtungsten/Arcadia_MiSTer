@@ -103,6 +103,7 @@ ENTITY sgs2637 IS
     reset    : IN std_logic;
     clk      : IN std_logic; -- 8x Pixel clock
     reset_na : IN std_logic;
+    full_reset_na : IN std_logic;  -- Full reset (game load or PAL/NTSC mode change)
     clear_ram : IN std_logic  -- clears video RAM when high (rising edge triggers clear)
     );
 END ENTITY sgs2637;
@@ -186,7 +187,6 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL clr_run     : std_logic := '0';
   SIGNAL clr_addr    : unsigned(9 DOWNTO 0) := (OTHERS => '0');
   SIGNAL clear_ram_d : std_logic := '0';
-  SIGNAL reset_na_d  : std_logic := '0';
 
   SIGNAL adi : uv12;
   SIGNAL ram_ad : uv10;
@@ -347,20 +347,19 @@ BEGIN
   dr<=dr_reg WHEN drreg_sel='1' ELSE dr_mem;
   
   -- RAM clear state machine: sequential clear of all 1024 bytes.
-  -- Triggered on clear_ram rising edge (new game download) or reset_na rising edge (reset release).
-  -- Uses a simple flag + counter to avoid routing congestion from parallel clear logic.
+  -- Triggered only on clear_ram rising edge (new game download). A manual
+  -- reset does NOT clear RAM, matching original hardware behavior where the
+  -- console reset button preserves RAM contents.
   RamClear: PROCESS(clk, reset_na) IS
   BEGIN
     IF reset_na='0' THEN
       clr_run     <= '0';
       clr_addr    <= (OTHERS => '0');
       clear_ram_d <= '0';
-      reset_na_d  <= '0';
     ELSIF rising_edge(clk) THEN
       clear_ram_d <= clear_ram;
-      reset_na_d  <= reset_na;
       
-      IF (clear_ram='1' AND clear_ram_d='0') OR (reset_na='1' AND reset_na_d='0') THEN
+      IF clear_ram='1' AND clear_ram_d='0' THEN
         clr_run  <= '1';
         clr_addr <= (OTHERS => '0');
       ELSIF clr_run='1' THEN
@@ -373,9 +372,12 @@ BEGIN
     END IF;
   END PROCESS RamClear;
   
-  Regs:PROCESS(clk,reset_na) IS
+  Regs:PROCESS(clk,reset_na,full_reset_na) IS
   BEGIN
-    IF reset_na='0' THEN
+    -- Full comprehensive register clearing on game load or PAL/NTSC mode
+    -- change. All video/control registers are reset to known values so games
+    -- start with clean state (fixes Circus mode-swap glitch).
+    IF full_reset_na='0' THEN
       ocoll_pre<='0';
       ccoll_pre<='0';
       ocoll_clr<='0';
@@ -399,6 +401,13 @@ BEGIN
       drreg_sel<='0';
       ccoll<=x"F";
       ocoll<="111111";
+      
+    -- Minimal register clearing on manual reset. Real Arcadia hardware does
+    -- not clear the 2637 registers when the console reset button is pressed,
+    -- so only collision pre-flags are cleared for safety.
+    ELSIF reset_na='0' THEN
+      ocoll_pre<='0';
+      ccoll_pre<='0';
       
     ELSIF rising_edge(clk) THEN
       --------------------------------------------
@@ -430,6 +439,8 @@ BEGIN
         WHEN x"0F5" =>  IF wreq='1' THEN o3_hc<=dw; END IF;
         WHEN x"0F6" =>  IF wreq='1' THEN o4_vc<=NOT dw; END IF;
         WHEN x"0F7" =>  IF wreq='1' THEN o4_hc<=dw; END IF;
+        -- V offset register: hardware inverts the written value.
+        -- voffset = NOT dw matches WinArcadia's 255 - A_VSCROLL convention.
         WHEN x"0FC" =>  IF wreq='1' THEN voffset<=NOT dw; END IF;
         WHEN x"0FD" =>  IF wreq='1' THEN r_0fd<=dw; END IF;
         WHEN x"0FE" =>  IF wreq='1' THEN r_0fe<=dw; END IF;
@@ -561,12 +572,15 @@ BEGIN
   
   ------------------------------------------------------------------------------
 
-  Vid:PROCESS (clk,reset_na) IS
+  Vid:PROCESS (clk,full_reset_na) IS
     VARIABLE h,m : boolean;
     VARIABLE i : natural RANGE 0 TO 7;
     VARIABLE dm_v : uv8;
   BEGIN
-    IF reset_na='0' THEN
+    -- Video timing is free-running on real hardware and is NOT reset by the
+    -- console reset button. Only full resets (game load, PAL/NTSC mode change)
+    -- restart the video timing.
+    IF full_reset_na='0' THEN
       hpos<=0;
       vpos<=0;
       cyc<=0;
@@ -776,6 +790,11 @@ BEGIN
           END IF;
           
         WHEN 4 => -- Object 1
+          -- Object horizontal positions use a different coordinate origin than
+          -- character/playfield rendering. The +2*HOFFSET-5 (=27) adjustment
+          -- aligns object sprites with the character grid. The 2*hshift term
+          -- was removed because it caused jerky sprite movement (Funky Fish):
+          -- objects moved 2px per hshift step while the playfield moved 1px.
           h:=objhit(hpos + 2*HOFFSET - 5,vpos,o1_hc,o1_vc,o1_size);
           
           IF h THEN
@@ -840,9 +859,12 @@ BEGIN
   vrst<=vrle;
   
   ------------------------------------------------------------------------------
-  Sono:PROCESS(clk, reset_na) IS
+  Sono:PROCESS(clk, full_reset_na) IS
   BEGIN
-    IF reset_na='0' THEN
+    -- Sound state is NOT reset by the console reset button (matching real
+    -- hardware). Only full resets (game load, PAL/NTSC mode change) reset it.
+    IF full_reset_na='0' THEN
+
       snd_cpt<="0000000";
       stog<='0';
       lfsr<=(OTHERS => '0');
