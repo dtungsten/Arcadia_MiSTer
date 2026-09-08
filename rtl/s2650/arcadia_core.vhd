@@ -414,6 +414,7 @@ BEGIN
   
   ad_rom <="000" & ad(11 DOWNTO 0) WHEN ad(14 DOWNTO 12)="000" ELSE
            "001" & ad(11 DOWNTO 0) WHEN ad(14 DOWNTO 12)="010" ELSE
+           "001" & ad(11 DOWNTO 0) WHEN ad(14 DOWNTO 12)="100" ELSE
             ad;
   
   -- CPU
