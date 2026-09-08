@@ -336,6 +336,7 @@ BEGIN
     OR crc32_final = x"4DA68DF8"  -- 3D Soccer (Emerson)
     OR crc32_final = x"1B5BE22A"  -- 3D Soccer (Tele-Fever)
     OR crc32_final = x"77C19320"  -- Funky Fish
+    OR crc32_final = x"8BF2DFA9"  -- Grand Slam Tennis
     OR crc32_final = x"1CEC4B21"  -- Hobo
     OR crc32_final = x"97060A54"  -- Jump Bug (Emerson)
     OR crc32_final = x"DC0264B8"  -- Jump Bug (Tele-Fever)
@@ -501,7 +502,11 @@ BEGIN
   ----------------------------------------------------------
   -- ROM / RAM
 
-  -- Cartridge ROM is read-only on real hardware. CPU writes blocked.
+  -- Cartridge ROM is read-only on real hardware. CPU writes are blocked here.
+  -- Previously the wcart address decode allowed CPU writes to alias into the
+  -- ROM address space, corrupting game code and causing lockups/boot failures
+  -- in 10 games (Doraemon, Funky Fish, 3D Attack, 3D Soccer, Crazy Climber,
+  -- Dr. Slump, Hobo, Mobile Soldier Gundam, Route 16, Macross).
   wcart <= '0';
   
   icart:PROCESS(clk) IS
@@ -543,6 +548,10 @@ BEGIN
   BEGIN
     IF reset_na='0' THEN
       tick_cpu<='0';
+      -- Reset the clock divider counter so the CPU starts at a known clock
+      -- phase after reset. Without this, the counter retained its value and
+      -- the CPU began executing at a different phase after each reset,
+      -- causing timing-dependent initialization differences.
       tick_cpu_cpt<=0;
     ELSIF rising_edge(clk) THEN
       IF OSD_STATUS='1' AND pause_osd='1' THEN

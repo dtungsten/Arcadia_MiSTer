@@ -488,9 +488,17 @@ PACKAGE BODY sgs2650_pack IS
             (vt(7)='1' AND NOT (vi1(7)='1' AND vi2(7)='0'))) THEN
           pslo_cc:="10";
         ELSIF psli_com='0' AND -- Signed <
+          -- Cases where vi1 < vi2 in two's complement:
+          --  1. vi1 negative, vi2 positive: always less
+          --  2. Both positive: less if subtraction borrows (vt(7)='1')
+          --  3. Both negative: less if subtraction result is negative (vt(7)='1').
+          --     When both operands are negative, vi1-vi2 fits in 8 bits without
+          --     overflow, so the sign bit of the result is unambiguous.
+          --     (Previously this was vt(7)='0', which incorrectly reported
+          --     vi1 > vi2 when both operands were negative.)
           ((vi1(7)='1' AND vi2(7)='0') OR
             (vi1(7)='0' AND vi2(7)='0' AND vt(7)='1') OR
-            (vi1(7)='1' AND vi2(7)='1' AND vt(7)='1')) THEN -- Signed <
+            (vi1(7)='1' AND vi2(7)='1' AND vt(7)='1')) THEN
           pslo_cc:="10";
         ELSE -- >
           pslo_cc:="01";
