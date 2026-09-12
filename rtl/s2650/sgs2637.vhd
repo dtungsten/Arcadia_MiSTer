@@ -207,6 +207,11 @@ ARCHITECTURE rtl OF sgs2637 IS
   ALIAS r_rng   : std_logic IS r_0fe(4); -- Random noise
   ALIAS r_sen   : std_logic IS r_0fe(3); -- Sound enable
   ALIAS r_loud  : uv3 IS r_0fe(2 DOWNTO 0); -- Sound loudness
+  -- Horizontal shift latched ONCE PER FRAME, at vpos = voffset. The 2637
+  -- applies a single horizontal offset for the whole frame; Blackjack & Poker
+  -- writes 0x18FE mid-frame from its sound routine, so sampling the live
+  -- register would tear rows in flight. See the latch in the Vid process.
+  SIGNAL hshift_lat : uv3;
   SIGNAL dmarow : uv4; -- FF -- DMA row
   SIGNAL r_1f8 : uv8;
   ALIAS r_gmode : std_logic IS r_1f8(7);     -- Graphic mode
@@ -503,13 +508,13 @@ BEGIN
 
   ------------------------------------------------------------------------------
   -- Memory address mux
-  MadMux:PROCESS(ram_dr,vpos,voffset,hpos,hshift,r_csize,
+  MadMux:PROCESS(ram_dr,vpos,voffset,hpos,hshift_lat,r_csize,
                  o1_size,o2_size,o3_size,o4_size,
                  o1_vc,o2_vc,o3_vc,o4_vc,cyc) IS
     VARIABLE hpos_adj : integer;
     VARIABLE vpos_adj : integer;
   BEGIN
-    hpos_adj := integer(hpos) - HOFFSET - to_integer(hshift);
+    hpos_adj := integer(hpos) - HOFFSET - to_integer(hshift_lat);
     IF hpos_adj < 0 THEN hpos_adj := 0; END IF;
     vpos_adj := integer(vpos) - to_integer(voffset);
     IF vpos_adj < 0 THEN vpos_adj := 0; END IF;
@@ -592,6 +597,7 @@ BEGIN
       hrle_pre<='0';
       hpulse<='0';
       col_grb<="000";
+      hshift_lat<="000";
       o1_hit<='0';
       o2_hit<='0';
       o3_hit<='0';
@@ -694,6 +700,16 @@ BEGIN
             END IF;
           END IF;
 
+          -- Latch the horizontal shift ONCE PER FRAME, at vpos = voffset.
+          -- Per-row sampling was tried (2026-09-12) and made things WORSE:
+          -- Blackjack & Poker writes 0x18FE mid-frame from its sound routine,
+          -- and a per-row latch lets those writes shift individual rows
+          -- (flicker + a shifted bottom row). A single per-frame offset is
+          -- correct for these games.
+          IF vpos = to_integer(voffset) THEN
+            hshift_lat <= hshift;
+          END IF;
+
           o12_coll<=o1_hit AND o2_hit;
           o23_coll<=o2_hit AND o3_hit;
           o34_coll<=o3_hit AND o4_hit;
@@ -734,16 +750,16 @@ BEGIN
           IF r_csize='0' OR r_ref='1' THEN -- Full scree
             IF vpos<to_integer(voffset) OR --to_integer(voffset)>=128 OR
               vpos>=to_integer(voffset)+8*26 OR
-              hpos<HOFFSET+to_integer(hshift) OR
-              hpos>=16*8+HOFFSET+to_integer(hshift) THEN
+              hpos<HOFFSET+to_integer(hshift_lat) OR
+              hpos>=16*8+HOFFSET+to_integer(hshift_lat) THEN
               m:=false;
             END IF;
 
           ELSE -- Half, small chars
             IF vpos<to_integer(voffset) OR --to_integer(voffset)>=128 OR
               vpos>=to_integer(voffset)+8*13 OR
-              hpos<HOFFSET+to_integer(hshift) OR
-              hpos>=16*8+HOFFSET+to_integer(hshift) THEN
+              hpos<HOFFSET+to_integer(hshift_lat) OR
+              hpos>=16*8+HOFFSET+to_integer(hshift_lat) THEN
               m:=false;
             END IF;
 
@@ -774,10 +790,10 @@ BEGIN
             h:=false;
             
           ELSIF r_csize='1' THEN -- 16x13 mode
-            h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift)) MOD 8,
+            h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift_lat)) MOD 8,
                    ((vpos-to_integer(voffset))/4) MOD 2,dm_v,ch);
           ELSE -- 16x26 mode
-            h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift)) MOD 8,
+            h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift_lat)) MOD 8,
                    ((vpos-to_integer(voffset))/8) MOD 2,dm_v,ch);
           END IF;
           
