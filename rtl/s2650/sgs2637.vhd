@@ -112,19 +112,26 @@ ARCHITECTURE rtl OF sgs2637 IS
   SUBTYPE uint9 IS natural RANGE 0 TO 511;
   
   -- 64 chars * 8 lines  = 512
+  -- Character generator ROM. Matches the real Signetics 2637 font as
+  -- implemented by WinArcadia (arcadia.h, arcadia_pdg, non-ROBSON branch).
+  -- The line-drawing glyphs (4..11) use 2-pixel strokes: the real chip draws
+  -- bars two pixels thick, and games (Tennis, Horse Racing, Blackjack & Poker)
+  -- rely on that for court lines, lane dividers and card borders. An earlier
+  -- version of this table had 1-pixel strokes, which made every line half
+  -- thickness, core-wide, in both axes. Do not "thin" these glyphs.
   CONSTANT CHARS : arr_uv8(0 TO 511) := (
       x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  -- ' '
       x"01",x"02",x"04",x"08",x"10",x"20",x"40",x"80",  -- /
       x"80",x"40",x"20",x"10",x"08",x"04",x"02",x"01",  -- \
       x"FF",x"FF",x"FF",x"FF",x"FF",x"FF",x"FF",x"FF",  -- #
-      x"FF",x"00",x"00",x"00",x"00",x"00",x"00",x"00",  -- "
-      x"01",x"01",x"01",x"01",x"01",x"01",x"01",x"01",  -- |
-      x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"FF",  -- _
-      x"80",x"80",x"80",x"80",x"80",x"80",x"80",x"80",  -- |
-      x"FF",x"01",x"01",x"01",x"01",x"01",x"01",x"01",  -- "|
-      x"FF",x"80",x"80",x"80",x"80",x"80",x"80",x"80",  -- |"
-      x"80",x"80",x"80",x"80",x"80",x"80",x"80",x"FF",  -- |_
-      x"01",x"01",x"01",x"01",x"01",x"01",x"01",x"FF",  -- _|
+      x"FF",x"FF",x"00",x"00",x"00",x"00",x"00",x"00",  -- "  (2px top bar)
+      x"03",x"03",x"03",x"03",x"03",x"03",x"03",x"03",  -- |  (2px right bar)
+      x"00",x"00",x"00",x"00",x"00",x"00",x"FF",x"FF",  -- _  (2px bottom bar)
+      x"C0",x"C0",x"C0",x"C0",x"C0",x"C0",x"C0",x"C0",  -- |  (2px left bar)
+      x"FF",x"FF",x"03",x"03",x"03",x"03",x"03",x"03",  -- "| (2px top + 2px right)
+      x"FF",x"FF",x"C0",x"C0",x"C0",x"C0",x"C0",x"C0",  -- |" (2px top + 2px left)
+      x"C0",x"C0",x"C0",x"C0",x"C0",x"C0",x"FF",x"FF",  -- |_ (2px left + 2px bottom)
+      x"03",x"03",x"03",x"03",x"03",x"03",x"FF",x"FF",  -- _| (2px right + 2px bottom)
       x"01",x"03",x"07",x"0F",x"1F",x"3F",x"7F",x"FF",  -- /
       x"80",x"C0",x"E0",x"F0",x"F8",x"FC",x"FE",x"FF",  -- \
       x"FF",x"FE",x"FC",x"F8",x"F0",x"E0",x"C0",x"80",  -- /
@@ -144,7 +151,7 @@ ARCHITECTURE rtl OF sgs2637 IS
       x"00",x"1C",x"22",x"20",x"20",x"20",x"22",x"1C",  -- C
       x"00",x"3C",x"22",x"22",x"22",x"22",x"22",x"3C",  -- D
       x"00",x"3E",x"20",x"20",x"3C",x"20",x"20",x"3E",  -- E
-      x"00",x"3E",x"20",x"20",x"38",x"20",x"20",x"20",  -- F
+      x"00",x"3E",x"20",x"20",x"3C",x"20",x"20",x"20",  -- F
       x"00",x"1E",x"20",x"20",x"20",x"26",x"22",x"1E",  -- G
       x"00",x"22",x"22",x"22",x"3E",x"22",x"22",x"22",  -- H
       x"00",x"1C",x"08",x"08",x"08",x"08",x"08",x"1C",  -- I
@@ -165,7 +172,7 @@ ARCHITECTURE rtl OF sgs2637 IS
       x"00",x"22",x"22",x"14",x"08",x"14",x"22",x"22",  -- X
       x"00",x"22",x"22",x"14",x"08",x"08",x"08",x"08",  -- Y
       x"00",x"3E",x"02",x"04",x"08",x"10",x"20",x"3E",  -- Z
-      x"00",x"00",x"00",x"00",x"00",x"00",x"0C",x"0C",  -- .
+      x"00",x"00",x"00",x"00",x"00",x"00",x"00",x"08",  -- .
       x"00",x"00",x"00",x"00",x"00",x"08",x"08",x"10",  -- ,
       x"00",x"00",x"08",x"08",x"3E",x"08",x"08",x"00",  -- +
       x"00",x"08",x"1E",x"28",x"1C",x"0A",x"3C",x"08",  -- $
