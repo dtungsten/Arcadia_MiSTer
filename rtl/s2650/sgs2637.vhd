@@ -809,7 +809,7 @@ BEGIN
           IF r_cm='0' THEN -- Character Color Mode = 0
             col_grb<=mux(h AND m,ch(7 DOWNTO 6) & r_cc(0),r_sc);
           ELSE -- Character Color Mode = 1
-            col_grb<=mux(h AND m,mux(ch(6),r_cc,r_acc),mux(ch(7),r_sc,r_asc));
+            col_grb<=mux(h AND m,mux(ch(6),r_cc,r_acc),mux(m,mux(ch(7),r_sc,r_asc),r_sc));
           END IF;
           
         WHEN 4 => -- Object 1
