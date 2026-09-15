@@ -214,11 +214,13 @@ ARCHITECTURE rtl OF sgs2637 IS
   ALIAS r_rng   : std_logic IS r_0fe(4); -- Random noise
   ALIAS r_sen   : std_logic IS r_0fe(3); -- Sound enable
   ALIAS r_loud  : uv3 IS r_0fe(2 DOWNTO 0); -- Sound loudness
-  -- Horizontal shift latched ONCE PER FRAME, at vpos = voffset. The 2637
-  -- applies a single horizontal offset for the whole frame; Blackjack & Poker
-  -- writes 0x18FE mid-frame from its sound routine, so sampling the live
-  -- register would tear rows in flight. See the latch in the Vid process.
-  SIGNAL hshift_lat : uv3;
+  -- Horizontal shift latched ONCE PER MAJORROW, at the first scanline of each
+  -- character row. Matches WinArcadia's newdma(), which samples A_VOLUME at
+  -- cpux==n4 of the first scanline of each row and holds it for the entire
+  -- row. The 2637 applies a per-row horizontal offset; Blackjack & Poker's
+  -- sound routine writes 0x18FE transiently, but sampling once per row at the
+  -- row boundary matches the real hardware's behavior.
+  SIGNAL hshift_lat  : uv3;
   SIGNAL dmarow : uv4; -- FF -- DMA row
   SIGNAL r_1f8 : uv8;
   ALIAS r_gmode : std_logic IS r_1f8(7);     -- Graphic mode
@@ -707,14 +709,20 @@ BEGIN
             END IF;
           END IF;
 
-          -- Latch the horizontal shift ONCE PER FRAME, at vpos = voffset.
-          -- Per-row sampling was tried (2026-09-12) and made things WORSE:
-          -- Blackjack & Poker writes 0x18FE mid-frame from its sound routine,
-          -- and a per-row latch lets those writes shift individual rows
-          -- (flicker + a shifted bottom row). A single per-frame offset is
-          -- correct for these games.
-          IF vpos = to_integer(voffset) THEN
-            hshift_lat <= hshift;
+          -- Sample hshift once per majorrow, matching WinArcadia's newdma().
+          -- WinArcadia samples A_VOLUME at cpux==n4 of the first scanline of
+          -- each character row and holds it for the entire row. No stability
+          -- filter needed: the real 2637 samples once per row.
+          IF hpos = 0 AND cyc = 0 THEN
+            IF r_csize = '1' THEN -- Small chars: 8 scanlines per row
+              IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 8 = 0) THEN
+                hshift_lat <= hshift;
+              END IF;
+            ELSE -- Tall chars: 16 scanlines per row
+              IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 16 = 0) THEN
+                hshift_lat <= hshift;
+              END IF;
+            END IF;
           END IF;
 
           o12_coll<=o1_hit AND o2_hit;
