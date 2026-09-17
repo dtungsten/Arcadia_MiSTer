@@ -247,9 +247,14 @@ BEGIN
       IF dpad0='0' THEN
         pot0_a<=unsigned(joystick_analog_0(15 DOWNTO 8))+x"80";
         pot0_b<=unsigned(joystick_analog_0( 7 DOWNTO 0))+x"80";
+        -- WinArcadia center clamp: 0x7E-0x81 -> 0x7D (Alien Invaders sees 0x80 as right)
+        IF (unsigned(joystick_analog_0( 7 DOWNTO 0))+x"80") >= x"7E" AND
+           (unsigned(joystick_analog_0( 7 DOWNTO 0))+x"80") <= x"81" THEN
+          pot0_b<=x"7D";
+        END IF;
       ELSE
         pot0_a<=x"80";
-        pot0_b<=x"80";
+        pot0_b<=x"7D";
         IF joystick_0(0)='1' THEN pot0_b<=x"FF"; END IF;
         IF joystick_0(1)='1' THEN pot0_b<=x"00"; END IF;
         IF joystick_0(2)='1' THEN pot0_a<=x"FF"; END IF;
@@ -272,9 +277,14 @@ BEGIN
       IF dpad1='0' THEN
         pot1_a<=unsigned(joystick_analog_1(15 DOWNTO 8))+x"80";
         pot1_b<=unsigned(joystick_analog_1( 7 DOWNTO 0))+x"80";
+        -- WinArcadia center clamp: 0x7E-0x81 -> 0x7D (Alien Invaders sees 0x80 as right)
+        IF (unsigned(joystick_analog_1( 7 DOWNTO 0))+x"80") >= x"7E" AND
+           (unsigned(joystick_analog_1( 7 DOWNTO 0))+x"80") <= x"81" THEN
+          pot1_b<=x"7D";
+        END IF;
       ELSE
         pot1_a<=x"80";
-        pot1_b<=x"80";
+        pot1_b<=x"7D";
         IF joystick_1(0)='1' THEN pot1_b<=x"FF"; END IF;
         IF joystick_1(1)='1' THEN pot1_b<=x"00"; END IF;
         IF joystick_1(2)='1' THEN pot1_a<=x"FF"; END IF;
