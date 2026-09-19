@@ -204,6 +204,13 @@ ARCHITECTURE rtl OF sgs2637 IS
   
   SIGNAL o1_hc,o1_vc,o2_hc,o2_vc : uv8; -- F0..F3
   SIGNAL o3_hc,o3_vc,o4_hc,o4_vc : uv8; -- F4..F7
+  -- Object positions latched at frame start. The real 2637 samples sprite
+  -- positions once per frame; games like Red Clash write the position register
+  -- mid-frame (CHARLINE==$F5) and rely on the frame-boundary latch to keep the
+  -- image and position in sync. Reading the live registers continuously shows
+  -- the mid-frame write immediately, which swaps ship/bullet sprites.
+  SIGNAL o1_hc_lat,o1_vc_lat,o2_hc_lat,o2_vc_lat : uv8; -- Latched at frame start
+  SIGNAL o3_hc_lat,o3_vc_lat,o4_hc_lat,o4_vc_lat : uv8; -- Latched at frame start
   SIGNAL voffset : uv8;  -- FC
   SIGNAL r_0fd_live : uv8;
   SIGNAL r_0fd_lat  : uv8;
@@ -277,7 +284,7 @@ ARCHITECTURE rtl OF sgs2637 IS
     vpos : uint9; -- Spot vertical   position
     vc   : uv8; -- Vertical   coordinate object
     size : std_logic; -- Object size
-    no   : uint2) RETURN unsigned IS
+    no   : natural RANGE 0 TO 7) RETURN unsigned IS
     VARIABLE vpos_adj : integer := integer(vpos) - to_integer(vc);
   BEGIN
     IF vpos_adj < 0 THEN vpos_adj := 0; END IF;
@@ -351,7 +358,7 @@ BEGIN
     FILE f : text OPEN write_mode IS "vram_dump.txt";
     VARIABLE l : line;
   BEGIN
-    WAIT FOR 10 ms;
+    WAIT FOR 40 ms;
     FOR i IN 0 TO 1023 LOOP
       write(l, integer'image(i) & ":" & integer'image(to_integer(ram(i))));
       writeline(f, l);
@@ -525,7 +532,7 @@ BEGIN
   -- Memory address mux
   MadMux:PROCESS(ram_dr,vpos,voffset,hpos,hshift_lat,r_csize,
                  o1_size,o2_size,o3_size,o4_size,
-                 o1_vc,o2_vc,o3_vc,o4_vc,cyc) IS
+                 o1_vc_lat,o2_vc_lat,o3_vc_lat,o4_vc_lat,cyc) IS
     VARIABLE hpos_adj : integer;
     VARIABLE vpos_adj : integer;
   BEGIN
@@ -564,16 +571,16 @@ BEGIN
         END IF;
         
       WHEN 3 => -- Read object 1 shape
-        ram_ad <=objadrs(vpos,o1_vc,o1_size,0);
+        ram_ad <=objadrs(vpos,o1_vc_lat,o1_size,0);
         
       WHEN 4 =>
-        ram_ad <=objadrs(vpos,o2_vc,o2_size,1);
+        ram_ad <=objadrs(vpos,o2_vc_lat,o2_size,1);
         
       WHEN 5 =>
-        ram_ad <=objadrs(vpos,o3_vc,o3_size,2);
+        ram_ad <=objadrs(vpos,o3_vc_lat,o3_size,2);
         
       WHEN 6 =>
-        ram_ad <=objadrs(vpos,o4_vc,o4_size,3);
+        ram_ad <=objadrs(vpos,o4_vc_lat,o4_size,3);
         
     END CASE;
 
@@ -582,11 +589,15 @@ BEGIN
   ------------------------------------------------------------------------------
   
   rom_dr<=CHARS(to_integer(rom_ad)) WHEN rising_edge (clk);
- 
-  Madar:PROCESS(clk) IS
+
+  Madar:PROCESS(clk, full_reset_na) IS
   BEGIN
-    IF rising_edge(clk) THEN
-      ram_dr<=ram(to_integer(ram_ad));
+    IF full_reset_na='0' THEN
+    ELSIF rising_edge(clk) THEN
+      ram_dr <= ram(to_integer(ram_ad));
+      CASE cyc IS
+        WHEN OTHERS => NULL;
+      END CASE;
     END IF;
   END PROCESS Madar;
   
@@ -623,6 +634,14 @@ BEGIN
       o3_hit<='0';
       o4_hit<='0';
       bg_hit<='0';
+      o1_hc_lat<=x"00";
+      o1_vc_lat<=x"00";
+      o2_hc_lat<=x"00";
+      o2_vc_lat<=x"00";
+      o3_hc_lat<=x"00";
+      o3_vc_lat<=x"00";
+      o4_hc_lat<=x"00";
+      o4_vc_lat<=x"00";
       vid_argb<="0000";
       vid_hsyn<='0';
       vid_vsyn<='0';
@@ -679,8 +698,20 @@ BEGIN
       
       CASE cyc IS
         WHEN 0 => -- Clear
-          
-          
+          IF hpos=0 AND vpos=0 THEN
+            -- Latch object positions at frame start. Matches real 2637
+            -- behavior where sprite positions are sampled once per frame.
+            o1_hc_lat<=o1_hc;
+            o1_vc_lat<=o1_vc;
+            o2_hc_lat<=o2_hc;
+            o2_vc_lat<=o2_vc;
+            o3_hc_lat<=o3_hc;
+            o3_vc_lat<=o3_vc;
+            o4_hc_lat<=o4_hc;
+            o4_vc_lat<=o4_vc;
+
+          END IF;
+
           IF hpos<hlen THEN
             hpos<=hpos+1;
           ELSE
@@ -854,11 +885,11 @@ BEGIN
           -- aligns object sprites with the character grid. The 2*hshift term
           -- was removed because it caused jerky sprite movement (Funky Fish):
           -- objects moved 2px per hshift step while the playfield moved 1px.
-          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o1_hc,o1_vc,o1_size);
+          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o1_hc_lat,o1_vc_lat,o1_size);
           
           
           IF h THEN
-            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o1_hc)) MOD 8);
+            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o1_hc_lat)) MOD 8);
             IF ram_dr(i)='1' THEN
               o1_hit<='1';
               col_grb<=o1_col;
@@ -866,11 +897,11 @@ BEGIN
           END IF;
           
         WHEN 5 => -- Object 2
-          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o2_hc,o2_vc,o2_size);
+          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o2_hc_lat,o2_vc_lat,o2_size);
           
           
           IF h THEN
-            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o2_hc)) MOD 8);
+            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o2_hc_lat)) MOD 8);
             IF ram_dr(i)='1' THEN
               o2_hit<='1';
               col_grb<=o2_col;
@@ -878,11 +909,11 @@ BEGIN
           END IF;
           
         WHEN 6 => -- Object 3
-          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o3_hc,o3_vc,o3_size);
+          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o3_hc_lat,o3_vc_lat,o3_size);
           
           
           IF h THEN
-            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o3_hc)) MOD 8);
+            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o3_hc_lat)) MOD 8);
             IF ram_dr(i)='1' THEN
               o3_hit<='1';
               col_grb<=o3_col;
@@ -890,11 +921,11 @@ BEGIN
           END IF;
           
         WHEN 7 => -- Object 4
-          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o4_hc,o4_vc,o4_size);
+          h:=objhit(hpos + 2*HOFFSET - 5,vpos,o4_hc_lat,o4_vc_lat,o4_size);
           
           
           IF h THEN
-            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o4_hc)) MOD 8);
+            i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o4_hc_lat)) MOD 8);
             IF ram_dr(i)='1' THEN
               o4_hit<='1';
               col_grb<=o4_col;
