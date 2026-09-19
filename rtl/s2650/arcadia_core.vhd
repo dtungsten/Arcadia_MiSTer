@@ -460,39 +460,7 @@ BEGIN
   ad_delay<=ad WHEN rising_edge(clk);
   
   ----------------------------------------------------------
---pragma synthesis_off
 
-
-  Dump:PROCESS IS
-    VARIABLE lout : line;
-    VARIABLE doread : boolean := false;
-    VARIABLE adr : uv15;
-  BEGIN
-    wure(clk);
-    IF doread THEN
-      write(lout,"RD(" & to_hstring('0' & adr) & ")=" & to_hstring(dr));
-      writeline(fil,lout);
-      doread:=false;
-    END IF;
-    IF req='1' AND ack='1' AND reset='0' AND reset_na='1' THEN
-      IF wr='1' THEN
-        write(lout,"WR(" & to_hstring('0' & ad) & ")=" & to_hstring(dw));
-        writeline(fil,lout);
-      ELSE
-        doread:=true;
-        adr:=ad;
-      END IF;
-    END IF;
-  END PROCESS Dump;
-
-  -- DEBUG: probe vrst/sense toggling (disabled for speed - re-enable when needed)
-  -- SenseProbe:PROCESS (vrst) IS
-  -- BEGIN
-  --   REPORT "VRST changed to " & std_logic'image(vrst) &
-  --          " at " & time'image(now) SEVERITY NOTE;
-  -- END PROCESS SenseProbe;
-
---pragma synthesis_on
   ----------------------------------------------------------
   -- MUX VIDEO
   clk_video<=clk;
