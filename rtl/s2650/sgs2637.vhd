@@ -205,9 +205,10 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL o1_hc,o1_vc,o2_hc,o2_vc : uv8; -- F0..F3
   SIGNAL o3_hc,o3_vc,o4_hc,o4_vc : uv8; -- F4..F7
   SIGNAL voffset : uv8;  -- FC
-  SIGNAL r_0fd  : uv8; -- FD
-  ALIAS  r_freq : uv7 IS r_0fd(6 DOWNTO 0); -- Sound Frequency
-  ALIAS  r_cm   : std_logic IS r_0fd(7); -- Color mode
+  SIGNAL r_0fd_live : uv8;
+  SIGNAL r_0fd_lat  : uv8;
+  ALIAS  r_freq : uv7 IS r_0fd_lat(6 DOWNTO 0); -- Sound Frequency
+  ALIAS  r_cm   : std_logic IS r_0fd_lat(7); -- Color mode
   
   SIGNAL r_0fe  : uv8; -- FE
   ALIAS hshift  : uv3 IS r_0fe(7 DOWNTO 5); -- Character shift
@@ -222,25 +223,30 @@ ARCHITECTURE rtl OF sgs2637 IS
   -- row boundary matches the real hardware's behavior.
   SIGNAL hshift_lat  : uv3;
   SIGNAL dmarow : uv4; -- FF -- DMA row
-  SIGNAL r_1f8 : uv8;
-  ALIAS r_gmode : std_logic IS r_1f8(7);     -- Graphic mode
-  ALIAS r_ref : std_logic IS r_1f8(6);    -- Resolution vert.
-  ALIAS r_acc : uv3 IS r_1f8(5 DOWNTO 3); -- Alternate Screen Colour
-  ALIAS r_asc : uv3 IS r_1f8(2 DOWNTO 0); -- Alternate Screen Colour
-  SIGNAL r_1f9 : uv8;
-  ALIAS r_cc : uv3 IS r_1f9(5 DOWNTO 3); -- Character Colour
-  ALIAS r_sc : uv3 IS r_1f9(2 DOWNTO 0); -- Screen Colour
-  ALIAS r_pmux  : std_logic IS r_1f9(6); -- Pot mux
-  ALIAS r_csize : std_logic IS r_1f9(7); -- Character Size
-  SIGNAL r_1fa,r_1fb : uv8;
-  ALIAS o1_size : std_logic IS r_1fb(7); -- Object 1 size
-  ALIAS o2_size : std_logic IS r_1fb(6); -- Object 2 size
-  ALIAS o3_size : std_logic IS r_1fa(7); -- Object 3 size
-  ALIAS o4_size : std_logic IS r_1fa(6); -- Object 4 size
-  ALIAS o1_col : uv3 IS r_1fb(5 DOWNTO 3); -- Object 1 colour
-  ALIAS o2_col : uv3 IS r_1fb(2 DOWNTO 0); -- Object 2 colour
-  ALIAS o3_col : uv3 IS r_1fa(5 DOWNTO 3); -- Object 3 colour
-  ALIAS o4_col : uv3 IS r_1fa(2 DOWNTO 0); -- Object 4 colour
+  SIGNAL r_1f8_live : uv8;
+  SIGNAL r_1f8_lat  : uv8;
+  ALIAS r_gmode : std_logic IS r_1f8_lat(7);     -- Graphic mode
+  ALIAS r_ref : std_logic IS r_1f8_lat(6);    -- Resolution vert.
+  ALIAS r_acc : uv3 IS r_1f8_lat(5 DOWNTO 3); -- Alternate Screen Colour
+  ALIAS r_asc : uv3 IS r_1f8_lat(2 DOWNTO 0); -- Alternate Screen Colour
+  SIGNAL r_1f9_live : uv8;
+  SIGNAL r_1f9_lat  : uv8;
+  ALIAS r_cc : uv3 IS r_1f9_lat(5 DOWNTO 3); -- Character Colour
+  ALIAS r_sc : uv3 IS r_1f9_lat(2 DOWNTO 0); -- Screen Colour
+  ALIAS r_pmux  : std_logic IS r_1f9_lat(6); -- Pot mux
+  ALIAS r_csize : std_logic IS r_1f9_lat(7); -- Character Size
+  SIGNAL r_1fa_live : uv8;
+  SIGNAL r_1fa_lat  : uv8;
+  SIGNAL r_1fb_live : uv8;
+  SIGNAL r_1fb_lat  : uv8;
+  ALIAS o1_size : std_logic IS r_1fb_lat(7); -- Object 1 size
+  ALIAS o2_size : std_logic IS r_1fb_lat(6); -- Object 2 size
+  ALIAS o3_size : std_logic IS r_1fa_lat(7); -- Object 3 size
+  ALIAS o4_size : std_logic IS r_1fa_lat(6); -- Object 4 size
+  ALIAS o1_col : uv3 IS r_1fb_lat(5 DOWNTO 3); -- Object 1 colour
+  ALIAS o2_col : uv3 IS r_1fb_lat(2 DOWNTO 0); -- Object 2 colour
+  ALIAS o3_col : uv3 IS r_1fa_lat(5 DOWNTO 3); -- Object 3 colour
+  ALIAS o4_col : uv3 IS r_1fa_lat(2 DOWNTO 0); -- Object 4 colour
   SIGNAL ccoll : uv4; -- Character collision
   SIGNAL ocoll : uv6; -- Object collision
   SIGNAL ocoll_clr,ocoll_pre,ccoll_clr,ccoll_pre : std_logic;
@@ -405,12 +411,12 @@ BEGIN
       o4_hc<=x"00";
       o4_vc<=x"00";
       voffset<=x"00";
-      r_0fd<=x"00";
+      r_0fd_live<=x"00";
       r_0fe<=x"00";
-      r_1f8<=x"00";
-      r_1f9<=x"00";
-      r_1fa<=x"00";
-      r_1fb<=x"00";
+      r_1f8_live<=x"00";
+      r_1f9_live<=x"00";
+      r_1fa_live<=x"00";
+      r_1fb_live<=x"00";
       dr_reg<=x"00";
       drreg_sel<='0';
       ccoll<=x"F";
@@ -456,13 +462,13 @@ BEGIN
         -- V offset register: hardware inverts the written value.
         -- voffset = NOT dw matches WinArcadia's 255 - A_VSCROLL convention.
         WHEN x"0FC" =>  IF wreq='1' THEN voffset<=NOT dw; END IF;
-        WHEN x"0FD" =>  IF wreq='1' THEN r_0fd<=dw; END IF;
+        WHEN x"0FD" =>  IF wreq='1' THEN r_0fd_live<=dw; END IF;
         WHEN x"0FE" =>  IF wreq='1' THEN r_0fe<=dw; END IF;
         WHEN x"0FF" =>  dr_reg<="1111" & dmarow; drreg_sel<='1';
-        WHEN x"1F8" =>  IF wreq='1' THEN r_1f8<=dw; END IF;
-        WHEN x"1F9" =>  IF wreq='1' THEN r_1f9<=dw; END IF;
-        WHEN x"1FA" =>  IF wreq='1' THEN r_1fa<=dw; END IF;
-        WHEN x"1FB" =>  IF wreq='1' THEN r_1fb<=dw; END IF;
+        WHEN x"1F8" =>  IF wreq='1' THEN r_1f8_live<=dw; END IF;
+        WHEN x"1F9" =>  IF wreq='1' THEN r_1f9_live<=dw; END IF;
+        WHEN x"1FA" =>  IF wreq='1' THEN r_1fa_live<=dw; END IF;
+        WHEN x"1FB" =>  IF wreq='1' THEN r_1fb_live<=dw; END IF;
         WHEN x"1FC" =>  dr_reg<="1111" & ccoll; drreg_sel<='1'; -- Coll bg
         WHEN x"1FD" =>  dr_reg<="11" & ocoll;   drreg_sel<='1'; -- Coll obj
         WHEN x"1FE" =>  dr_reg<=pot24; drreg_sel<='1'; -- POT24
@@ -607,6 +613,11 @@ BEGIN
       hpulse<='0';
       col_grb<="000";
       hshift_lat<="000";
+      r_0fd_lat<=x"00";
+      r_1f8_lat<=x"00";
+      r_1f9_lat<=x"00";
+      r_1fa_lat<=x"00";
+      r_1fb_lat<=x"00";
       o1_hit<='0';
       o2_hit<='0';
       o3_hit<='0';
@@ -668,6 +679,8 @@ BEGIN
       
       CASE cyc IS
         WHEN 0 => -- Clear
+          
+          
           IF hpos<hlen THEN
             hpos<=hpos+1;
           ELSE
@@ -718,9 +731,21 @@ BEGIN
               IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 8 = 0) THEN
                 hshift_lat <= hshift;
               END IF;
+              IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 2 = 0) THEN
+                r_0fd_lat <= r_0fd_live;
+                r_1f8_lat <= r_1f8_live;
+                r_1f9_lat <= r_1f9_live;
+                r_1fa_lat <= r_1fa_live;
+                r_1fb_lat <= r_1fb_live;
+              END IF;
             ELSE -- Tall chars: 16 scanlines per row
               IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 16 = 0) THEN
                 hshift_lat <= hshift;
+                r_0fd_lat <= r_0fd_live;
+                r_1f8_lat <= r_1f8_live;
+                r_1f9_lat <= r_1f9_live;
+                r_1fa_lat <= r_1fa_live;
+                r_1fb_lat <= r_1fb_live;
               END IF;
             END IF;
           END IF;
@@ -738,6 +763,8 @@ BEGIN
 
           -- Flag inversion: when CPU Flag (PSU bit 6) is high, all colors are inverted
           vid_argb <= '1' & (NOT(col_grb(1) & col_grb(2) & col_grb(0)) XOR (flag & flag & flag));
+          
+          
 
         WHEN 1 =>
           -- Wait !
@@ -820,6 +847,7 @@ BEGIN
             col_grb<=mux(h AND m,mux(ch(6),r_cc,r_acc),mux(m,mux(ch(7),r_sc,r_asc),r_sc));
           END IF;
           
+          
         WHEN 4 => -- Object 1
           -- Object horizontal positions use a different coordinate origin than
           -- character/playfield rendering. The +2*HOFFSET-5 (=27) adjustment
@@ -827,6 +855,7 @@ BEGIN
           -- was removed because it caused jerky sprite movement (Funky Fish):
           -- objects moved 2px per hshift step while the playfield moved 1px.
           h:=objhit(hpos + 2*HOFFSET - 5,vpos,o1_hc,o1_vc,o1_size);
+          
           
           IF h THEN
             i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o1_hc)) MOD 8);
@@ -839,6 +868,7 @@ BEGIN
         WHEN 5 => -- Object 2
           h:=objhit(hpos + 2*HOFFSET - 5,vpos,o2_hc,o2_vc,o2_size);
           
+          
           IF h THEN
             i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o2_hc)) MOD 8);
             IF ram_dr(i)='1' THEN
@@ -850,6 +880,7 @@ BEGIN
         WHEN 6 => -- Object 3
           h:=objhit(hpos + 2*HOFFSET - 5,vpos,o3_hc,o3_vc,o3_size);
           
+          
           IF h THEN
             i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o3_hc)) MOD 8);
             IF ram_dr(i)='1' THEN
@@ -860,6 +891,7 @@ BEGIN
           
         WHEN 7 => -- Object 4
           h:=objhit(hpos + 2*HOFFSET - 5,vpos,o4_hc,o4_vc,o4_size);
+          
           
           IF h THEN
             i:=7- ((hpos + 2*HOFFSET - 5-to_integer(o4_hc)) MOD 8);
