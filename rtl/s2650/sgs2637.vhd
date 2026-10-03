@@ -240,7 +240,7 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL r_1f9_lat  : uv8;
   ALIAS r_cc : uv3 IS r_1f9_lat(5 DOWNTO 3); -- Character Colour
   ALIAS r_sc : uv3 IS r_1f9_lat(2 DOWNTO 0); -- Screen Colour
-  ALIAS r_pmux  : std_logic IS r_1f9_lat(6); -- Pot mux
+  ALIAS r_pmux  : std_logic IS r_1f9_live(6); -- Pot mux
   ALIAS r_csize : std_logic IS r_1f9_lat(7); -- Character Size
   SIGNAL r_1fa_live : uv8;
   SIGNAL r_1fa_lat  : uv8;
