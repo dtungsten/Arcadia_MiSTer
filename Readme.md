@@ -140,13 +140,19 @@ had this reversed, the core auto swaps 20 ROM variants across 12 distinct games
 
 ### Auto XY-Swap
 
-Ten ROM variants across six games have their correct X/Y orientation detected
+Sixteen ROM variants across twelve games have their correct X/Y orientation detected
 automatically by CRC32.
 
+- 3D Attack
 - 3D Soccer
 - Funky Fish
+- Grand Slam Tennis
+- Hobo
 - Jump Bug
+- Mobile Soldier Gundam
+- Route 16
 - Spiders
+- Super Dimension Fortress Macross
 - The End
 - Turtles/Turpin
 
@@ -161,11 +167,10 @@ Leave Off when adjusting video settings that need a live picture.
 - **Basketball:** This game just controls very weird, not a glitch.
 - **Black Jack & Poker:** doesn't boot properly
 - **Circus:** requires analog stick input or D-pad emulation
+- **Crazy Climber:** bottom row of the display is missing (non-game-breaking).
 - **Escape:** doesn't play right
 - **Frogger:** graphics corruption - a known ROM issue
-- **Golf:** unable to start
 - **Grand Slam Tennis:** graphics corruption, unable to start
-- **Horse Racing:** unable to start game
 - **Monaco Grand Prix:** controls are just weird, not a glitch
 - **Ocean Battle:** analog input supported for ships dropping depth charges
 - **Robot Killer:** unable to control properly
@@ -173,11 +178,32 @@ Leave Off when adjusting video settings that need a live picture.
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
 
+## Changelog 20260919
+
+- 2637: latch object positions at the frame boundary, color/object registers at
+  the majorrow boundary, and horizontal shift once per frame (sampled once per
+  majorrow at hpos=0). Fixes shimmer and misplaced objects on games that rewrite
+  these registers during active display.
+- 2637: draw character ROM line glyphs at 2px to match the real 2637 font.
+- 2637: use the screen color for the out-of-window border in color mode 1.
+
+## Changelog 20260916
+
+- Fix paddle center for Alien Invaders.
+
+## Changelog 20260908
+
+- Fix Golf ROM banking: map 0x4000-0x5FFF to the second ROM half. Golf now boots.
+- Add full_reset_na for comprehensive register clearing on game load and mode change.
+- Add Grand Slam Tennis to auto_swapxy.
+- Document wcart gating, tick_cpu_cpt, and signed-comparison fixes.
+
 ## Changelog 20260907
 
 - Fixed Circus glitch: CPU general-purpose registers (r0-r3, r1b-r3b) were never
   reset in synthesis due to pragma blocks excluding them from the reset path.
   Stale register values across resets corrupted game initialization.
+- Fix indirect ZBSR/ZBRR addressing in the s2650 CPU.
 - Reset CPU clock divider on reset so the CPU starts at a consistent clock phase.
 - Reset now acts like a power cycle: creset fires on all resets (manual reset
   triggers a full CPU sync reset). Real hardware does not do this, but it
