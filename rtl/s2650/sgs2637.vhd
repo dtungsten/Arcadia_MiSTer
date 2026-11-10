@@ -266,6 +266,15 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL col_grb : uv3;
   CONSTANT HOFFSET : natural := 16;
 
+  -- Video sync pulse widths (settled timing). HSYNC_W is in pixels, VSYNC_W
+  -- in lines; BACKPORCH/VBACKPORCH are the trailing offsets. These affect
+  -- ONLY the video sync outputs; the CPU's vrle/vrst frame timing still uses
+  -- the original hsync/vsync constants.
+  CONSTANT HSYNC_W : natural := 16;
+  CONSTANT VSYNC_W : natural := 3;
+  CONSTANT BACKPORCH : natural := 30;
+  CONSTANT VBACKPORCH : natural := 14;
+
   SIGNAL cyc : uint3;
   SIGNAL vrle,vrle_pre,hrle,hrle_pre,hpulse : std_logic;
   SIGNAL hpos,hlen,hsync,hdisp : uint9;
@@ -934,8 +943,8 @@ BEGIN
           
       END CASE;
       
-      vid_hsyn<=to_std_logic(hpos>hsync);
-      vid_vsyn<=to_std_logic(vpos>vsync);
+      vid_hsyn<=to_std_logic((hpos >= hlen - HSYNC_W - BACKPORCH) AND (hpos < hlen - BACKPORCH));
+      vid_vsyn<=to_std_logic((vpos >= vlen - VSYNC_W - VBACKPORCH) AND (vpos < vlen - VBACKPORCH));
       vrle    <=to_std_logic(vpos>vsync);
       vrle_pre<=vrle;
       hrle    <=to_std_logic(hpos>hsync);
