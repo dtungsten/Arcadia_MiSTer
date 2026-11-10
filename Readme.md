@@ -161,20 +161,30 @@ automatically by CRC32.
 When enabled, opening the MiSTer menu freezes the CPU and silences audio output
 Leave Off when adjusting video settings that need a live picture.
 
-## Known Issues
+## Known Issues (differences vs WinArcadia)
 
-- **Alien Invaders:** graphic corruption, missile launcher is forced to the right.
-- **Basketball:** This game just controls very weird, not a glitch.
-- **Black Jack & Poker:** doesn't boot properly
-- **Circus:** requires analog stick input or D-pad emulation
-- **Crazy Climber:** bottom row of the display is missing (non-game-breaking).
-- **Escape:** doesn't play right
-- **Frogger:** graphics corruption - a known ROM issue
-- **Grand Slam Tennis:** graphics corruption, unable to start
-- **Monaco Grand Prix:** controls are just weird, not a glitch
-- **Ocean Battle:** analog input supported for ships dropping depth charges
-- **Robot Killer:** unable to control properly
-- **Star Chess:** graphics corruption
+Most remaining differences are **sprite flicker / multiplexing timing** that does not match WinArcadia's phase or rate. This is likely a shared root cause in how the 2637 reports sprite priority/collision per frame, but it has not been isolated. Several of these flicker differences are cosmetic and some are arguably preferable (noted per game).
+
+### Systemic flicker / multiplexing timing
+Astro Invader, Dr. Slump, The End, Tennis, Missile War, Space Mission, Space Raiders, Space Squadron, Space Vultures, Spiders, SDF Macross.
+
+### Per-game
+- **Crazy Climber** -- missing bottom row of building.
+- **Doraemon** -- yellow mice sprite does not flicker; appears too bright.
+- **Dr. Slump** -- enemies flicker heavily where WinArcadia shows none.
+- **The End** -- bottom row of "END" is not magenta (WinArcadia may be wrong here); flicker rate differs and is faster in the ground; stars flicker where WinArcadia does not (kept intentionally).
+- **Frogger** -- frog sprite reads more cyan than greyish; one pixel too high; stray ladyfrog on the intro screen.
+- **Missile War** -- incoming missiles more flickery (acceptable).
+- **Gundam** -- eyes not two-tone; sprite glitches and stays down after reset.
+- **Space Attack** -- stars twinkle (intentional, looks nice).
+- **Spiders** -- flicker timing; swapxy handled automatically.
+- **SDF Macross** -- half bullet remains; stars flicker.
+
+### Informational (not bugs)
+- **Basketball** -- controls feel odd.
+- **Monaco Grand Prix** -- controls feel odd.
+- **Circus** -- requires analog stick input or D-pad emulation.
+- **Ocean Battle** -- analog input supported for ships dropping depth charges.
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
 
@@ -186,6 +196,8 @@ Unknown issues may exist. Please refer to known working behavior when reporting 
   these registers during active display.
 - 2637: draw character ROM line glyphs at 2px to match the real 2637 font.
 - 2637: use the screen color for the out-of-window border in color mode 1.
+- 2637: swap vertical line divisors between 16x13 and 16x26 character modes
+  (`/4` and `/8` were reversed upstream), correcting character glyph heights.
 
 ## Changelog 20260916
 
