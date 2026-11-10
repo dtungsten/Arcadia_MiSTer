@@ -166,7 +166,7 @@ Leave Off when adjusting video settings that need a live picture.
 Most remaining differences are **sprite flicker / multiplexing timing** that does not match WinArcadia's phase or rate. This is likely a shared root cause in how the 2637 reports sprite priority/collision per frame, but it has not been isolated. Several of these flicker differences are cosmetic and some are arguably preferable (noted per game).
 
 ### Systemic flicker / multiplexing timing
-Astro Invader, Dr. Slump, The End, Tennis, Missile War, Space Mission, Space Raiders, Space Squadron, Space Vultures, Spiders, SDF Macross.
+Astro Invader, Dr. Slump, The End, Funky Fish, Tennis, Missile War, Space Mission, Space Raiders, Space Squadron, Space Vultures, Spiders, SDF Macross.
 
 ### Per-game
 - **Crazy Climber** -- missing bottom row of building.
@@ -174,10 +174,14 @@ Astro Invader, Dr. Slump, The End, Tennis, Missile War, Space Mission, Space Rai
 - **Dr. Slump** -- enemies flicker heavily where WinArcadia shows none.
 - **The End** -- bottom row of "END" is not magenta (WinArcadia may be wrong here); flicker rate differs and is faster in the ground; stars flicker where WinArcadia does not (kept intentionally).
 - **Frogger** -- frog sprite reads more cyan than greyish; one pixel too high; stray ladyfrog on the intro screen.
+- **Funky Fish** -- flicker off-cycle (may be a capture artifact); drifts upward; left stick not responding (was working at some point on some game).
+- **Hobo** -- still needs swapxy; only the X axis responds; glitches on reset and pause.
+- **Horse Racing** -- reset not working.
+- **Jungler** -- odd side walls appear.
 - **Missile War** -- incoming missiles more flickery (acceptable).
 - **Gundam** -- eyes not two-tone; sprite glitches and stays down after reset.
 - **Space Attack** -- stars twinkle (intentional, looks nice).
-- **Spiders** -- flicker timing; swapxy handled automatically.
+- **Spiders** -- needs swapxy; flicker timing issue.
 - **SDF Macross** -- half bullet remains; stars flicker.
 
 ### Informational (not bugs)
@@ -187,6 +191,12 @@ Astro Invader, Dr. Slump, The End, Tennis, Missile War, Space Mission, Space Rai
 - **Ocean Battle** -- analog input supported for ships dropping depth charges.
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
+
+## Changelog 20261002
+
+- Reverted the register-latching experiment: re-enabled the static auto_swapxy
+  CRC table and made the pot-mux bit (r_pmux) read live again. The latching
+  approach broke Hobo (only the X axis responded) and disturbed other titles.
 
 ## Changelog 20260919
 
