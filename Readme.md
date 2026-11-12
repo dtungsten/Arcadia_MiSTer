@@ -192,6 +192,14 @@ Astro Invader, Dr. Slump, The End, Funky Fish, Tennis, Missile War, Space Missio
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
 
+## Changelog 20261024
+
+- Reworked S2637 video sync generation to explicit pulse widths: HSYNC_W=16
+  pixels, VSYNC_W=3 lines, BACKPORCH=30, VBACKPORCH=14. Settled through the
+  October sync-width / backporch / vblank sweeps; corrects vertical sync and
+  the top-of-picture fold on NTSC CRTs. CPU vrle/vrst frame timing is unchanged.
+- Release binary rebuilt reproducibly from the committed source.
+
 ## Changelog 20261002
 
 - Reverted the register-latching experiment: re-enabled the static auto_swapxy
