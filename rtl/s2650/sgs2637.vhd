@@ -294,7 +294,7 @@ ARCHITECTURE rtl OF sgs2637 IS
     vc   : uv8; -- Vertical   coordinate object
     size : std_logic; -- Object size
     no   : natural RANGE 0 TO 7) RETURN unsigned IS
-    VARIABLE vpos_adj : integer := integer(vpos) - to_integer(vc);
+    VARIABLE vpos_adj : integer := integer(vpos) - to_integer(vc) - 1;
   BEGIN
     IF vpos_adj < 0 THEN vpos_adj := 0; END IF;
     IF size='0' THEN -- 16 lines
@@ -329,9 +329,9 @@ ARCHITECTURE rtl OF sgs2637 IS
     IF hc > 227 THEN
       RETURN false;
     ELSIF size='1' THEN -- Small
-      RETURN vpos>=ivc AND (vpos-ivc)<8 AND hpos>=ihc AND (hpos-ihc)<8;
+      RETURN vpos>ivc AND (vpos-ivc)<=8 AND hpos>=ihc AND (hpos-ihc)<8;
     ELSE -- High
-      RETURN vpos>=ivc AND (vpos-ivc)<16 AND hpos>=ihc AND (hpos-ihc)<8;
+      RETURN vpos>ivc AND (vpos-ivc)<=16 AND hpos>=ihc AND (hpos-ihc)<8;
     END IF;
   END FUNCTION;
 
