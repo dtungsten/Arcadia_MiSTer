@@ -212,6 +212,7 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL o1_hc_lat,o1_vc_lat,o2_hc_lat,o2_vc_lat : uv8; -- Latched at frame start
   SIGNAL o3_hc_lat,o3_vc_lat,o4_hc_lat,o4_vc_lat : uv8; -- Latched at frame start
   SIGNAL voffset : uv8;  -- FC
+  SIGNAL voffset_lat : uv8; -- FC latched at frame start
   SIGNAL r_0fd_live : uv8;
   SIGNAL r_0fd_lat  : uv8;
   ALIAS  r_freq : uv7 IS r_0fd_lat(6 DOWNTO 0); -- Sound Frequency
@@ -539,7 +540,7 @@ BEGIN
 
   ------------------------------------------------------------------------------
   -- Memory address mux
-  MadMux:PROCESS(ram_dr,vpos,voffset,hpos,hshift_lat,r_csize,
+  MadMux:PROCESS(ram_dr,vpos,voffset_lat,hpos,hshift_lat,r_csize,
                  o1_size,o2_size,o3_size,o4_size,
                  o1_vc_lat,o2_vc_lat,o3_vc_lat,o4_vc_lat,cyc) IS
     VARIABLE hpos_adj : integer;
@@ -547,7 +548,7 @@ BEGIN
   BEGIN
     hpos_adj := integer(hpos) - HOFFSET - to_integer(hshift_lat);
     IF hpos_adj < 0 THEN hpos_adj := 0; END IF;
-    vpos_adj := integer(vpos) - to_integer(voffset);
+    vpos_adj := integer(vpos) - to_integer(voffset_lat);
     IF vpos_adj < 0 THEN vpos_adj := 0; END IF;
     
     -- Character ROM
@@ -567,7 +568,13 @@ BEGIN
           END IF;
           
         ELSE -- High chars
-          ram_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 16) * 16,10);
+          -- Char map is banked like WinArcadia's newdma(): rows 0-12 at
+          -- game 0x1800 (ram 0), rows 13-25 at game 0x1930+row*16 (ram 512+).
+          IF (vpos_adj / 16) <= 12 THEN
+            ram_ad <=to_unsigned(hpos_adj / 8 + (vpos_adj / 16) * 16,10);
+          ELSE
+            ram_ad <=to_unsigned(hpos_adj / 8 + 512 + ((vpos_adj / 16) - 13) * 16,10);
+          END IF;
         END IF;
         
       WHEN 2 => -- Read user character shape
@@ -598,6 +605,7 @@ BEGIN
   ------------------------------------------------------------------------------
   
   rom_dr<=CHARS(to_integer(rom_ad)) WHEN rising_edge (clk);
+
 
   Madar:PROCESS(clk, full_reset_na) IS
   BEGIN
@@ -718,6 +726,7 @@ BEGIN
             o3_vc_lat<=o3_vc;
             o4_hc_lat<=o4_hc;
             o4_vc_lat<=o4_vc;
+            voffset_lat<=voffset;
 
           END IF;
 
@@ -743,20 +752,20 @@ BEGIN
           bg_hit<='0';
 
           IF r_csize='1' THEN -- Small chars
-            IF vpos<to_integer(voffset) THEN
+            IF vpos<to_integer(voffset_lat) THEN
               dmarow<=to_unsigned(15,4);
-            ELSIF vpos<to_integer(voffset)+8*13 THEN
-              dmarow<=to_unsigned((vpos-to_integer(voffset))/8,4);
-            ELSIF vpos<to_integer(voffset)+8*13*2 AND r_ref='1' THEN
-              dmarow<=to_unsigned((vpos-to_integer(voffset))/8-13,4);
+            ELSIF vpos<to_integer(voffset_lat)+8*13 THEN
+              dmarow<=to_unsigned((vpos-to_integer(voffset_lat))/8,4);
+            ELSIF vpos<to_integer(voffset_lat)+8*13*2 AND r_ref='1' THEN
+              dmarow<=to_unsigned((vpos-to_integer(voffset_lat))/8-13,4);
             ELSE
               dmarow<=to_unsigned(13,4);
             END IF;
           ELSE -- Tall chars
-            IF vpos<to_integer(voffset) THEN
+            IF vpos<to_integer(voffset_lat) THEN
               dmarow<=to_unsigned(15,4);
-            ELSIF vpos<to_integer(voffset)+16*13 THEN
-              dmarow<=to_unsigned((vpos-to_integer(voffset))/16,4);
+            ELSIF vpos<to_integer(voffset_lat)+16*13 THEN
+              dmarow<=to_unsigned((vpos-to_integer(voffset_lat))/16,4);
             ELSE
               dmarow<=to_unsigned(13,4);
             END IF;
@@ -768,10 +777,10 @@ BEGIN
           -- filter needed: the real 2637 samples once per row.
           IF hpos = 0 AND cyc = 0 THEN
             IF r_csize = '1' THEN -- Small chars: 8 scanlines per row
-              IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 8 = 0) THEN
+              IF (vpos >= to_integer(voffset_lat)) AND ((vpos - to_integer(voffset_lat)) MOD 8 = 0) THEN
                 hshift_lat <= hshift;
               END IF;
-              IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 2 = 0) THEN
+              IF (vpos >= to_integer(voffset_lat)) AND ((vpos - to_integer(voffset_lat)) MOD 2 = 0) THEN
                 r_0fd_lat <= r_0fd_live;
                 r_1f8_lat <= r_1f8_live;
                 r_1f9_lat <= r_1f9_live;
@@ -779,7 +788,7 @@ BEGIN
                 r_1fb_lat <= r_1fb_live;
               END IF;
             ELSE -- Tall chars: 16 scanlines per row
-              IF (vpos >= to_integer(voffset)) AND ((vpos - to_integer(voffset)) MOD 16 = 0) THEN
+              IF (vpos >= to_integer(voffset_lat)) AND ((vpos - to_integer(voffset_lat)) MOD 16 = 0) THEN
                 hshift_lat <= hshift;
                 r_0fd_lat <= r_0fd_live;
                 r_1f8_lat <= r_1f8_live;
@@ -829,34 +838,44 @@ BEGIN
 
           m:=true;
 
-          IF r_csize='0' OR r_ref='1' THEN -- Full scree
-            IF vpos<to_integer(voffset) OR --to_integer(voffset)>=128 OR
-              vpos>=to_integer(voffset)+8*26 OR
+          -- Visible window matches WinArcadia: voffsetend = voffset + rowlimit*hiresnum
+          --   rowlimit = 26 if r_ref='1' else 13 ; hiresnum = 16 if r_csize='0' else 8
+          IF r_csize='0' AND r_ref='1' THEN
+            IF vpos<to_integer(voffset_lat) OR vpos>=to_integer(voffset_lat)+16*26 OR
               hpos<HOFFSET+to_integer(hshift_lat) OR
               hpos>=16*8+HOFFSET+to_integer(hshift_lat) THEN
               m:=false;
             END IF;
-
-          ELSE -- Half, small chars
-            IF vpos<to_integer(voffset) OR --to_integer(voffset)>=128 OR
-              vpos>=to_integer(voffset)+8*13 OR
+          ELSIF r_csize='0' AND r_ref='0' THEN
+            IF vpos<to_integer(voffset_lat) OR vpos>=to_integer(voffset_lat)+16*13 OR
               hpos<HOFFSET+to_integer(hshift_lat) OR
               hpos>=16*8+HOFFSET+to_integer(hshift_lat) THEN
               m:=false;
             END IF;
-
+          ELSIF r_csize='1' AND r_ref='1' THEN
+            IF vpos<to_integer(voffset_lat) OR vpos>=to_integer(voffset_lat)+8*26 OR
+              hpos<HOFFSET+to_integer(hshift_lat) OR
+              hpos>=16*8+HOFFSET+to_integer(hshift_lat) THEN
+              m:=false;
+            END IF;
+          ELSE
+            IF vpos<to_integer(voffset_lat) OR vpos>=to_integer(voffset_lat)+8*13 OR
+              hpos<HOFFSET+to_integer(hshift_lat) OR
+              hpos>=16*8+HOFFSET+to_integer(hshift_lat) THEN
+              m:=false;
+            END IF;
           END IF;
           --IF r_csize='1' THEN -- 16x13 mode
-          --  IF vpos<to_integer(voffset) OR to_integer(voffset)>=128 OR
-          --    vpos>=to_integer(voffset)+16*13 OR
+          --  IF vpos<to_integer(voffset_lat) OR to_integer(voffset_lat)>=128 OR
+          --    vpos>=to_integer(voffset_lat)+16*13 OR
           --    hpos<HOFFSET+to_integer(hshift) OR
           --    hpos>=16*8+HOFFSET+to_integer(hshift) THEN
           --    m:=false;
           --  END IF;
           --ELSE -- 16x26 mode
-          --  IF vpos<to_integer(voffset) OR to_integer(voffset)>=128 OR
-          --    (vpos>=8*13+to_integer(voffset) AND r_ref='0') OR
-          --    (vpos>=8*26+to_integer(voffset) AND r_ref='1') OR
+          --  IF vpos<to_integer(voffset_lat) OR to_integer(voffset_lat)>=128 OR
+          --    (vpos>=8*13+to_integer(voffset_lat) AND r_ref='0') OR
+          --    (vpos>=8*26+to_integer(voffset_lat) AND r_ref='1') OR
           --    hpos<HOFFSET+to_integer(hshift) OR
           --    hpos>=16*8+HOFFSET+to_integer(hshift) THEN
           --    m:=false; 
@@ -873,10 +892,10 @@ BEGIN
             
           ELSIF r_csize='1' THEN -- 16x13 mode
             h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift_lat)) MOD 8,
-                   ((vpos-to_integer(voffset))/4) MOD 2,dm_v,ch);
+                   ((vpos-to_integer(voffset_lat))/4) MOD 2,dm_v,ch);
           ELSE -- 16x26 mode
             h:=pix(gmode,(hpos-HOFFSET-to_integer(hshift_lat)) MOD 8,
-                   ((vpos-to_integer(voffset))/8) MOD 2,dm_v,ch);
+                   ((vpos-to_integer(voffset_lat))/8) MOD 2,dm_v,ch);
           END IF;
           
           bg_hit<=to_std_logic(h AND m);
