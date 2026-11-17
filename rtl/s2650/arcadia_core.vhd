@@ -546,10 +546,7 @@ BEGIN
     END IF;
   END PROCESS DivCLK;
   
-  reset_na<=NOT reset;
-  -- creset fires only on ROM download (new game load). Real Arcadia hardware
-  -- does not reset the CPU when the console reset button is pressed, so a
-  -- manual reset only resets the video/sound/register state via reset_na.
+  reset_na<=NOT reset AND NOT ioctl_download;
   creset<=ioctl_download;
   
 END struct;

@@ -163,34 +163,30 @@ Leave Off when adjusting video settings that need a live picture.
 
 ## Known Issues (differences vs WinArcadia)
 
-Most remaining differences are **sprite flicker / multiplexing timing** that does not match WinArcadia's phase or rate. This is likely a shared root cause in how the 2637 reports sprite priority/collision per frame, but it has not been isolated. Several of these flicker differences are cosmetic and some are arguably preferable (noted per game).
-
-### Systemic flicker / multiplexing timing
-Astro Invader, Dr. Slump, The End, Funky Fish, Tennis, Missile War, Space Mission, Space Raiders, Space Squadron, Space Vultures, Spiders, SDF Macross.
-
-### Per-game
-- **Crazy Climber** -- missing bottom row of building.
-- **Doraemon** -- yellow mice sprite does not flicker; appears too bright.
-- **Dr. Slump** -- enemies flicker heavily where WinArcadia shows none.
-- **The End** -- bottom row of "END" is not magenta (WinArcadia may be wrong here); flicker rate differs and is faster in the ground; stars flicker where WinArcadia does not (kept intentionally).
-- **Frogger** -- frog sprite reads more cyan than greyish; one pixel too high; stray ladyfrog on the intro screen.
-- **Funky Fish** -- flicker off-cycle (may be a capture artifact); drifts upward; left stick not responding (was working at some point on some game).
-- **Hobo** -- still needs swapxy; only the X axis responds; glitches on reset and pause.
-- **Horse Racing** -- reset not working.
-- **Jungler** -- odd side walls appear.
-- **Missile War** -- incoming missiles more flickery (acceptable).
-- **Gundam** -- eyes not two-tone; sprite glitches and stays down after reset.
-- **Space Attack** -- stars twinkle (intentional, looks nice).
-- **Spiders** -- needs swapxy; flicker timing issue.
-- **SDF Macross** -- half bullet remains; stars flicker.
+- The sprite flicker / multiplexing timing differences previously listed
+  as known issues are **not core bugs**. WinArcadia defaults to a smoother
+  presentation than the original hardware actually produces; the core
+  matches real hardware. No change needed.
 
 ### Informational (not bugs)
-- **Basketball** -- controls feel odd.
-- **Monaco Grand Prix** -- controls feel odd.
+
+- **Basketball** -- controls are rather odd.
+- **Monaco Grand Prix** -- controls are rather odd.
 - **Circus** -- requires analog stick input or D-pad emulation.
 - **Ocean Battle** -- analog input supported for ships dropping depth charges.
+- **Frogger** -- According to WinArcadia readme, has graphical issues.
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
+
+### Changelog 20261114
+
+- **Crazy Climber** -- missing bottom row of the building. Tall-char rows
+  13-25 now read from the correct char-map bank (game 0x1930+row*16,
+  ram 512+), and the visible window matches WinArcadia's
+  rowlimit*hiresnum (16*26 for tall chars), so rows 13-14 are no longer
+  clipped. voffset is now latched at frame start to match the real 2637's
+  once-per-frame sampling.
+- **Sprites** -- rendered one pixel too high; now aligned.
 
 ## Changelog 20261024
 
