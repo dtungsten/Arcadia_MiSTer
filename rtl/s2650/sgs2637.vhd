@@ -194,6 +194,7 @@ ARCHITECTURE rtl OF sgs2637 IS
   SIGNAL clr_run     : std_logic := '0';
   SIGNAL clr_addr    : unsigned(9 DOWNTO 0) := (OTHERS => '0');
   SIGNAL clear_ram_d : std_logic := '0';
+  SIGNAL reset_na_d  : std_logic := '1'; -- for warm-reset RAM-clear edge detect
 
   SIGNAL adi : uv12;
   SIGNAL ram_ad : uv10;
@@ -383,20 +384,20 @@ BEGIN
 
   dr<=dr_reg WHEN drreg_sel='1' ELSE dr_mem;
   
-  -- RAM clear state machine: sequential clear of all 1024 bytes.
-  -- Triggered only on clear_ram rising edge (new game download). A manual
-  -- reset does NOT clear RAM, matching original hardware behavior where the
-  -- console reset button preserves RAM contents.
-  RamClear: PROCESS(clk, reset_na) IS
+  -- RAM store + clear. Deliberately NOT gated by reset_na: a warm reset must
+  -- clear RAM while the CPU is still held in reset, so the game re-initialises
+  -- from a clean slate instead of resuming from preserved memory (which caused
+  -- Gundam/Doraemon sprite carryover and the scroll jump). The clear is armed
+  -- on the reset_na falling edge and completes well within the long reset
+  -- pulse, before the CPU is released.
+  RamStore: PROCESS(clk) IS
   BEGIN
-    IF reset_na='0' THEN
-      clr_run     <= '0';
-      clr_addr    <= (OTHERS => '0');
-      clear_ram_d <= '0';
-    ELSIF rising_edge(clk) THEN
+    IF rising_edge(clk) THEN
       clear_ram_d <= clear_ram;
-      
-      IF clear_ram='1' AND clear_ram_d='0' THEN
+      reset_na_d  <= reset_na;
+
+      IF (clear_ram='1' AND clear_ram_d='0') OR
+         (reset_na='0' AND reset_na_d='1') THEN
         clr_run  <= '1';
         clr_addr <= (OTHERS => '0');
       ELSIF clr_run='1' THEN
@@ -406,8 +407,31 @@ BEGIN
           clr_addr <= clr_addr + 1;
         END IF;
       END IF;
+
+      IF clr_run='1' THEN
+        -- Match WinArcadia's arcadia_setmemmap()/arcadia_reset(): the PVI RAM
+        -- region (game 0x1800-0x1FFF, i.e. this ram[0..1023]) is zeroed, then
+        -- two unmapped ranges are seeded with the values real hardware returns
+        -- when an open bus is read. Clearing this region is what stops sprite
+        -- imagery being retained across a reset.
+        --
+        -- Why the seeds: 0x1909-0x190F and 0x19C0-0x19F7 are UNMAPPED addresses
+        -- in the PVI map. On real hardware an open TTL line floats, so reads of
+        -- 0x1909-0x190F come back as 0xC0 (occasionally 0x40) and 0x19C0-0x19F7
+        -- as 0xFF. WinArcadia seeds these so games that read the unmapped region
+        -- see hardware-accurate values. We copy that behaviour for fidelity.
+        IF clr_addr >= 16#109# AND clr_addr <= 16#10F# THEN
+          ram(to_integer(clr_addr)) <= x"C0";
+        ELSIF clr_addr >= 16#1C0# AND clr_addr <= 16#1F7# THEN
+          ram(to_integer(clr_addr)) <= x"FF";
+        ELSE
+          ram(to_integer(clr_addr)) <= x"00";
+        END IF;
+      ELSIF wreq='1' THEN
+        ram(to_integer(adi(9 DOWNTO 0))) <= dw;
+      END IF;
     END IF;
-  END PROCESS RamClear;
+  END PROCESS RamStore;
   
   Regs:PROCESS(clk,reset_na,full_reset_na) IS
   BEGIN
@@ -439,28 +463,40 @@ BEGIN
       ccoll<=x"F";
       ocoll<="111111";
       
-    -- Minimal register clearing on manual reset. Real Arcadia hardware does
-    -- not clear the 2637 registers when the console reset button is pressed,
-    -- so only collision pre-flags are cleared for safety.
+    -- Warm reset (OSD reset / console reset button): clear the PVI register
+    -- file to known defaults so stale sprite positions, scroll offset and
+    -- control registers from the previous game do not leak through. RAM is
+    -- deliberately preserved (see RamClear), matching hardware where the
+    -- reset button keeps game memory intact. Video timing lives in the Vid
+    -- process and is NOT touched here, so the display does not blank.
     ELSIF reset_na='0' THEN
       ocoll_pre<='0';
       ccoll_pre<='0';
+      o1_hc<=x"00";
+      o1_vc<=x"00";
+      o2_hc<=x"00";
+      o2_vc<=x"00";
+      o3_hc<=x"00";
+      o3_vc<=x"00";
+      o4_hc<=x"00";
+      o4_vc<=x"00";
+      voffset<=x"00";
+      r_0fd_live<=x"00";
+      r_0fe<=x"00";
+      r_1f8_live<=x"00";
+      r_1f9_live<=x"00";
+      r_1fa_live<=x"00";
+      r_1fb_live<=x"00";
+      dr_reg<=x"00";
+      drreg_sel<='0';
+      ccoll<=x"F";
+      ocoll<="111111";
       
     ELSIF rising_edge(clk) THEN
       --------------------------------------------
-      -- RAM
+      -- RAM read only here; writes (CPU store and warm-reset clear) are handled
+      -- in RamStore so the clear can run while the CPU is held in reset.
       dr_mem<=ram(to_integer(adi(9 DOWNTO 0)));
-
-      IF clr_run='1' THEN
-        ram(to_integer(clr_addr)) <= x"00";
-      ELSIF wreq='1' THEN
-        -- DEBUG: log 2637 register writes and VRAM writes (disabled for speed)
-        -- IF adi(9 DOWNTO 4)=x"0F" OR adi(9 DOWNTO 4)=x"1F" THEN
-        --   REPORT "2637 reg write " & integer'image(to_integer(adi(9 DOWNTO 0))) &
-        --          " = " & integer'image(to_integer(dw)) SEVERITY NOTE;
-        -- END IF;
-        ram(to_integer(adi(9 DOWNTO 0)))<=dw;
-      END IF;
       
       --------------------------------------------
       -- Registers
@@ -620,7 +656,7 @@ BEGIN
   
   ------------------------------------------------------------------------------
 
-  Vid:PROCESS (clk,full_reset_na) IS
+  Vid:PROCESS (clk,full_reset_na,reset_na) IS
     VARIABLE h,m : boolean;
     VARIABLE i : natural RANGE 0 TO 7;
     VARIABLE dm_v : uv8;
@@ -664,6 +700,35 @@ BEGIN
       vid_vsyn<='0';
       vid_de<='0';
       vid_ce<='0';
+    -- Warm reset (OSD reset / console reset button): clear the LATCHED video
+    -- data registers only. The renderer reads the _lat copies (voffset_lat,
+    -- o*_vc_lat, r_*_lat), not the live registers, so without this a warm
+    -- reset left stale scroll offset and sprite geometry on screen until the
+    -- next frame-start latch refreshed them (Gundam eye, scroll jump). Video
+    -- timing counters (hpos/vpos/cyc/sync) are deliberately NOT touched, so
+    -- the display does not blank.
+    ELSIF reset_na='0' THEN
+      hshift_lat<="000";
+      hpulse<='0';
+      r_0fd_lat<=x"00";
+      r_1f8_lat<=x"00";
+      r_1f9_lat<=x"00";
+      r_1fa_lat<=x"00";
+      r_1fb_lat<=x"00";
+      o1_hit<='0';
+      o2_hit<='0';
+      o3_hit<='0';
+      o4_hit<='0';
+      bg_hit<='0';
+      o1_hc_lat<=x"00";
+      o1_vc_lat<=x"00";
+      o2_hc_lat<=x"00";
+      o2_vc_lat<=x"00";
+      o3_hc_lat<=x"00";
+      o3_vc_lat<=x"00";
+      o4_hc_lat<=x"00";
+      o4_vc_lat<=x"00";
+      voffset_lat<=x"00";
     ELSIF rising_edge(clk) THEN
       --------------------------------------------
       IF np='0' THEN

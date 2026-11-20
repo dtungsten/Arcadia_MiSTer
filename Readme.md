@@ -178,6 +178,22 @@ Leave Off when adjusting video settings that need a live picture.
 
 Unknown issues may exist. Please refer to known working behavior when reporting bugs.
 
+### Changelog 20261120
+
+- Reset rework: the CPU is now held through `creset` (a clocked hold) on OSD
+  reset, console reset button, and PAL/NTSC mode change, instead of the
+  asynchronous `reset_na`. The async reset corrupted CPU initialization on
+  those resets; a game load already held the CPU through `creset` and always
+  released cleanly. `reset_na` is now driven only by true power-on. PVI
+  registers, video timing, and RAM still clear on every reset via
+  `full_reset_na`. Fixes stale sprite/scroll state and white-screen-on-reset
+  across the library (Super Gobbler, Gundam, Macross, Horse Racing, and
+  others). Supersedes the `20260907` reset entry.
+- Warning cleanup: removed a debug LED tap and its `dbg_flag` port, a stale
+  `rtl/base/ovo.vhd` reference in `files.qip`, and an implicit-default warning
+  on the CPU interrupt vector; corrected the OSD-close delay literals to their
+  intended 50 ms / 500 ms values.
+
 ### Changelog 20261114
 
 - **Crazy Climber** -- missing bottom row of the building. Tall-char rows

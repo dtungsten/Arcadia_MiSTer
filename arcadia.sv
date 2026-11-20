@@ -182,6 +182,8 @@ assign BUTTONS = {1'b0, close_osd};
 
 wire [1:0] ar = status[7:6];
 
+assign LED_USER = 1'b0;
+
 assign VIDEO_ARX = (!ar) ? 12'd984 : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? (status[2] ? 12'd807 : 12'd678) : 12'd0;
 
@@ -582,10 +584,10 @@ always @(posedge CLK_50M) begin
 	close_osd <= 0;
 
 	if(ntscd2 != ntsc_r) begin
-		if(osd_s2 && delay < 24'd2500000) begin // 50ms pulse to close OSD
+		if(osd_s2 && delay < 24'd1431800) begin // 50ms pulse to close OSD
 			close_osd <= 1;
 			delay <= delay + 1'd1;
-		end else if (delay < 24'd25000000) begin // 500ms total delay
+		end else if (delay < 24'd14318000) begin // 500ms total delay
 			delay <= delay + 1'd1;
 		end else begin
 			state <= 1;
@@ -640,21 +642,33 @@ always @(posedge clksys) begin
 		mode_change_r <= 0;
 	
 	if (RESET | status[0] | buttons[1] | !pll_locked | (ntsc_prev != ntsc)) begin
-		reset_counter <= 21'd1500000;
+		reset_counter <= 21'd1500000;  // ~52 ms at 28.636 MHz
 	end
 	else if (reset_counter != 0) begin
-		reset_counter <= reset_counter - 1;
+		reset_counter <= reset_counter - 21'd1;
 	end
 	
 	reset_reg <= (reset_counter != 0);
 end
 
-wire reset = RESET | status[0] | buttons[1] | reset_reg;
-
-// Full reset: game load (RESET) or PAL/NTSC mode change. Manual reset
-// (buttons[1]) and OSD reset (status[0]) do NOT trigger a full reset.
-wire full_reset = RESET | mode_change_r;
+// Two reset domains, deliberately split.
+//
+// full_reset clears the PVI registers, video timing, and RAM. It fires on
+// every reset source -- game load, OSD reset, console reset button, PAL/NTSC
+// mode change -- matching WinArcadia, which runs one full clear
+// (project_reset -> engine_reset -> arcadia_reset) for power-on and button
+// alike. reset_reg stretches the momentary button/OSD pulse to ~52 ms so the
+// clear completes before release.
+//
+// cpu_reset is RESET-only (true power-on). Button/OSD/mode-change hold the
+// CPU through creset (a clocked hold) instead of the asynchronous reset_na,
+// because the async reset corrupted CPU initialization on those resets; a
+// game load already held the CPU through creset and always released cleanly.
+// See arcadia_core.vhd for the creset / full_reset_na split.
+wire reset = RESET | status[0] | buttons[1] | reset_reg | mode_change_r;
+wire full_reset = reset;
 wire full_reset_na = ~full_reset;
+wire cpu_reset = RESET;
 
 //////////////////////////////////////////////////////////////////
 
@@ -663,10 +677,11 @@ wire [7:0] sound;
 arcadia_core arcadia_core
 (
 	.clk(clksys),
-	.reset(reset),
+	.reset(cpu_reset),
 	.full_reset_na(full_reset_na),
 	.OSD_STATUS(OSD_STATUS),
 	.pause_osd(status[9]),
+
 
 	.ntsc_pal(ntsc),  // 0 = NTSC, 1 = PAL
 	.swapxy(status[4]),

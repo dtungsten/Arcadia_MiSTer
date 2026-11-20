@@ -199,7 +199,7 @@ BEGIN
       clk       => clk,
       reset_na  => reset_na,
       full_reset_na => full_reset_na,
-      clear_ram => ioctl_download);
+      clear_ram => ioctl_download or (NOT full_reset_na));
   
   --   1 2 3
   --   4 5 6
@@ -457,6 +457,7 @@ BEGIN
       reset_na => reset_na);
   
   int<='0';
+  ivec <= (others => '0');  -- interrupts disabled; tie vector to 0
   ad_delay<=ad WHEN rising_edge(clk);
   
   ----------------------------------------------------------
@@ -546,7 +547,14 @@ BEGIN
     END IF;
   END PROCESS DivCLK;
   
-  reset_na<=NOT reset AND NOT ioctl_download;
-  creset<=ioctl_download;
+  -- reset_na is the CPU's asynchronous reset, driven only by the top-level
+  -- cpu_reset (true power-on). Button/OSD/mode-change do NOT use it: an async
+  -- reset there corrupted CPU init. They hold the CPU through creset instead.
+  reset_na<=NOT reset;
+  -- creset is a clocked hold on the CPU. It fires on cartridge load
+  -- (ioctl_download) and on any full reset (button, OSD, mode change), so the
+  -- CPU keeps clocking at fetch and releases cleanly -- the same path a game
+  -- load always took. full_reset_na separately clears PVI/video/RAM.
+  creset<=ioctl_download or (NOT full_reset_na);
   
 END struct;

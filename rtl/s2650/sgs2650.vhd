@@ -837,6 +837,33 @@ BEGIN
       r1b<=x"00";
       r2b<=x"00";
       r3b<=x"00";
+      -- Full execution-state reset so the CPU does not resume mid-instruction
+      -- after an OSD/button reset. Without state<=sOPCODE the CPU woke in a
+      -- stale decode state with cleared registers and PC=0, executing garbage
+      -- nondeterministically (Gundam eyes / 3D Attack carryover). Mirror the
+      -- ROM-load clean reset (the IF reset='1' block) here so a warm reset is
+      -- a complete, deterministic CPU restart while RAM stays preserved.
+      state<=sOPCODE;
+      ad_i<=(OTHERS =>'0');
+      wr_i<='0';
+      dw_i<=x"00";
+      req_i<='0';
+      ph<="00";
+      indexed<='0';
+      intp<='0';
+      ri<=x"00";
+      rh<=x"00";
+      ru<=x"00";
+      -- Clear the ENTIRE PSU (all 8 bits incl stack pointer psu(2:0), flag psu(6),
+      -- and psu(5)) plus the return-address stack ras and rras. These were NOT
+      -- cleared before, so on a button reset they carried the game's leftover
+      -- values while a fresh load had virgin zeros -- the one deterministic
+      -- difference between load and reset. Stale ras/psu(2:0) sends an early
+      -- RET to a wrong address, the CPU runs garbage, and garbage sets the
+      -- color flag psu(6) wrong (Super Gobbler inverts on reset, correct on load).
+      psu<=(OTHERS =>'0');
+      ras<=(OTHERS =>(OTHERS =>'0'));
+      rras<=(OTHERS =>'0');
             
     ELSIF rising_edge(clk) THEN
       
@@ -896,12 +923,6 @@ BEGIN
       
       --------------------------------------------
       psu(7)<=sense;
-      -- DEBUG: log when psu(7) changes value (disabled for speed)
-      -- IF psu(7) /= sense THEN
-      --   REPORT "PSU(7) update: old=" & std_logic'image(psu(7)) &
-      --          " new=" & std_logic'image(sense) &
-      --          " at " & time'image(now) SEVERITY NOTE;
-      -- END IF;
       
       --------------------------------------------
       IF reset='1' THEN
